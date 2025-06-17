@@ -4,14 +4,19 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Mountain, Plus, Edit3, Trash2, Check, X } from "lucide-react"
-import type { User } from "@/app/page"
+import { ListChecks, Plus, Edit3, Trash2, Check, X } from "lucide-react" // Changed Mountain to ListChecks
+import type { User } from "@/app/page" // Assuming User type is still relevant
 
+// Props will likely change when connected to Supabase
 interface ChecklistChannelProps {
-  user: User
+  user?: User // Made optional for now
+  channelId?: string
+  communityId?: string
 }
 
-export default function ChecklistChannel({ user }: ChecklistChannelProps) {
+export default function ChecklistChannel({ user, channelId, communityId }: ChecklistChannelProps) {
+  // Data fetching from Supabase based on channelId would go here
+  // For now, keeping the static data structure
   const [gearItems, setGearItems] = useState([
     { id: 1, text: "Crash pads (Umair?)", checked: false },
     { id: 2, text: "Chalk & chalk bag", checked: true },
@@ -36,7 +41,7 @@ export default function ChecklistChannel({ user }: ChecklistChannelProps) {
   const handleAddItem = () => {
     if (newItemText.trim()) {
       const newItem = {
-        id: Date.now(),
+        id: Date.now(), // Will be replaced by Supabase-generated ID
         text: newItemText.trim(),
         checked: false,
       }
@@ -70,21 +75,26 @@ export default function ChecklistChannel({ user }: ChecklistChannelProps) {
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-950">
-      {/* Desktop Channel Header */}
-      <div className="hidden lg:flex items-center space-x-2 border-b border-gray-200 dark:border-gray-800 p-4">
-        <Mountain className="h-5 w-5 text-ucsd-blue" />
-        <h1 className="text-xl font-bold text-ucsd-navy dark:text-gray-100">gear-checklist</h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">Track and manage climbing and hiking gear</p>
+      {/* Updated Channel Header - applied to all screen sizes */}
+      <div className="flex items-center p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+        <ListChecks className="h-5 w-5 mr-3 text-ucsd-blue dark:text-ucsd-gold flex-shrink-0" />
+        <h1 className="text-lg font-semibold text-ucsd-navy dark:text-gray-100 truncate">Gear Checklist</h1>
+        <p className="text-sm text-gray-600 dark:text-gray-400 ml-2 mt-0.5 truncate hidden sm:block">
+          Track and manage climbing and hiking gear
+        </p>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto p-4 sm:p-6 w-full">
-          <div className="mb-6">
+          {/* Removed redundant inner title as it's now in the main header */}
+          {/* <div className="mb-6">
             <h2 className="text-2xl font-bold text-ucsd-navy dark:text-gray-100">Gear Checklist</h2>
             <p className="text-gray-500 dark:text-gray-400">Bouldering + Hiking</p>
-          </div>
+          </div> */}
 
-          <div className="space-y-2">
+          <div className="space-y-2 mt-2">
+            {" "}
+            {/* Added small margin-top */}
             {gearItems.map((item) => (
               <div
                 key={item.id}
@@ -112,7 +122,7 @@ export default function ChecklistChannel({ user }: ChecklistChannelProps) {
                         id={`gear-${item.id}`}
                         checked={item.checked}
                         onCheckedChange={(checked) => handleCheckedChange(item.id, checked as boolean)}
-                        className="h-5 w-5"
+                        className="h-5 w-5 data-[state=checked]:bg-ucsd-gold data-[state=checked]:border-ucsd-gold border-gray-400 dark:border-gray-600"
                       />
                       <label
                         htmlFor={`gear-${item.id}`}
@@ -130,7 +140,7 @@ export default function ChecklistChannel({ user }: ChecklistChannelProps) {
                         size="icon"
                         variant="ghost"
                         onClick={() => startEditing(item)}
-                        className="h-8 w-8 text-gray-500 hover:text-gray-700"
+                        className="h-8 w-8 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                       >
                         <Edit3 className="h-4 w-4" />
                       </Button>
@@ -138,7 +148,7 @@ export default function ChecklistChannel({ user }: ChecklistChannelProps) {
                         size="icon"
                         variant="ghost"
                         onClick={() => handleDeleteItem(item.id)}
-                        className="h-8 w-8 text-red-500 hover:text-red-700"
+                        className="h-8 w-8 text-red-500 hover:text-red-700 dark:hover:text-red-400"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

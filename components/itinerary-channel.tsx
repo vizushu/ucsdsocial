@@ -1,7 +1,6 @@
 "use client"
 
-import type React from "react"
-
+import type React from "react" // Keep type import
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,10 +27,10 @@ import {
   Luggage,
   Coffee,
   ShowerHead,
-  Camera,
+  CameraIcon,
   Car,
 } from "lucide-react"
-import type { User } from "@/app/page"
+import type { User } from "@/app/page" // Assuming User type is still relevant or can be adapted
 import { cn } from "@/lib/utils"
 
 interface Activity {
@@ -49,15 +48,20 @@ interface ItineraryDay {
   activities: Activity[]
 }
 
+// Props will likely change when connected to Supabase
 interface ItineraryChannelProps {
-  user: User
+  user?: User // Made optional for now
+  channelId?: string
+  communityId?: string
 }
 
 const generateId = () => Math.random().toString(36).substr(2, 9)
 
-export default function ItineraryChannel({ user }: ItineraryChannelProps) {
+export default function ItineraryChannel({ user, channelId, communityId }: ItineraryChannelProps) {
+  // Data fetching from Supabase based on channelId would go here
+  // For now, keeping the static data structure
   const [itineraryDays, setItineraryDays] = useState<ItineraryDay[]>([
-    // Day 1 (Validated - Kept existing richer descriptions)
+    // Day 1
     {
       day: "Day 1 – Thurs, June 19",
       subtitle: "(Arrival / Chill Climb Day)",
@@ -65,7 +69,7 @@ export default function ItineraryChannel({ user }: ItineraryChannelProps) {
         {
           id: generateId(),
           text: "Arrive early, set up camp at Upper Pines",
-          time: "2:00 PM", // Adjusted time for arrival/setup
+          time: "2:00 PM",
           icon: Tent,
           iconColor: "bg-green-100 dark:bg-green-800",
           borderColor: "border-green-500 dark:border-green-400",
@@ -96,7 +100,7 @@ export default function ItineraryChannel({ user }: ItineraryChannelProps) {
         },
       ],
     },
-    // Day 2 (Updated based on user's list)
+    // Day 2
     {
       day: "Day 2 – Fri, June 20",
       subtitle: "(Yosemite Falls / Scenic Day)",
@@ -113,7 +117,7 @@ export default function ItineraryChannel({ user }: ItineraryChannelProps) {
           id: generateId(),
           text: "Explore valley floor / Sentinel Meadow / Mirror Lake",
           time: "1:00 PM",
-          icon: Camera, // Using Camera for scenic exploration
+          icon: CameraIcon,
           iconColor: "bg-purple-100 dark:bg-purple-800",
           borderColor: "border-purple-500 dark:border-purple-400",
         },
@@ -127,7 +131,7 @@ export default function ItineraryChannel({ user }: ItineraryChannelProps) {
         },
       ],
     },
-    // Day 3 (Updated based on user's list)
+    // Day 3
     {
       day: "Day 3 – Sat, June 21",
       subtitle: "(Half Dome Day)",
@@ -143,7 +147,7 @@ export default function ItineraryChannel({ user }: ItineraryChannelProps) {
         {
           id: generateId(),
           text: "Climb the cables (permits pending)",
-          time: "7:00 AM", // Assuming start of climb after prep
+          time: "7:00 AM",
           icon: Hiking,
           iconColor: "bg-teal-100 dark:bg-teal-800",
           borderColor: "border-teal-500 dark:border-teal-400",
@@ -151,15 +155,15 @@ export default function ItineraryChannel({ user }: ItineraryChannelProps) {
         {
           id: generateId(),
           text: "Bring poles, snacks, water. It's 10–12 hrs roundtrip",
-          time: "7:05 AM", // Reminder right after starting
-          icon: Luggage, // Representing gear
+          time: "7:05 AM",
+          icon: Luggage,
           iconColor: "bg-gray-100 dark:bg-gray-700",
           borderColor: "border-gray-500 dark:border-gray-400",
         },
         {
           id: generateId(),
           text: "Yosemite Falls (view or quick visit during/after Half Dome)",
-          time: "5:00 PM", // Placeholder, could be flexible
+          time: "5:00 PM",
           icon: Waves,
           iconColor: "bg-blue-100 dark:bg-blue-800",
           borderColor: "border-blue-500 dark:border-blue-400",
@@ -168,13 +172,13 @@ export default function ItineraryChannel({ user }: ItineraryChannelProps) {
           id: generateId(),
           text: "Dinner & early crash",
           time: "7:30 PM",
-          icon: Bed, // Using Bed for "early crash"
+          icon: Bed,
           iconColor: "bg-indigo-100 dark:bg-indigo-800",
           borderColor: "border-indigo-500 dark:border-indigo-400",
         },
       ],
     },
-    // Day 4 (Updated based on user's list)
+    // Day 4
     {
       day: "Day 4 – Sun, June 22",
       subtitle: "(Recovery / Adventure Flex Day)",
@@ -183,7 +187,7 @@ export default function ItineraryChannel({ user }: ItineraryChannelProps) {
           id: generateId(),
           text: "Sleep in or do a short hike",
           time: "9:00 AM",
-          icon: Bed, // Or Hiking if they choose hike
+          icon: Bed,
           iconColor: "bg-purple-100 dark:bg-purple-800",
           borderColor: "border-purple-500 dark:border-purple-400",
         },
@@ -199,7 +203,7 @@ export default function ItineraryChannel({ user }: ItineraryChannelProps) {
           id: generateId(),
           text: "Optional: explore rental bikes or river float",
           time: "2:00 PM",
-          icon: Bike, // Or Waves
+          icon: Bike,
           iconColor: "bg-lime-100 dark:bg-lime-800",
           borderColor: "border-lime-500 dark:border-lime-400",
         },
@@ -213,7 +217,7 @@ export default function ItineraryChannel({ user }: ItineraryChannelProps) {
         },
       ],
     },
-    // Day 5 (New day added)
+    // Day 5
     {
       day: "Day 5 – Mon, June 23",
       subtitle: "(Pack + Dip Day)",
@@ -222,7 +226,7 @@ export default function ItineraryChannel({ user }: ItineraryChannelProps) {
           id: generateId(),
           text: "Pack up + Brekky",
           time: "8:00 AM",
-          icon: Coffee, // Representing Brekky, Luggage for pack up
+          icon: Coffee,
           iconColor: "bg-amber-100 dark:bg-amber-800",
           borderColor: "border-amber-500 dark:border-amber-400",
         },
@@ -238,7 +242,7 @@ export default function ItineraryChannel({ user }: ItineraryChannelProps) {
           id: generateId(),
           text: "Final Group Pics",
           time: "10:30 AM",
-          icon: Camera,
+          icon: CameraIcon,
           iconColor: "bg-pink-100 dark:bg-pink-800",
           borderColor: "border-pink-500 dark:border-pink-400",
         },
@@ -258,10 +262,7 @@ export default function ItineraryChannel({ user }: ItineraryChannelProps) {
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null)
   const [editingValue, setEditingValue] = useState("")
   const [newActivityText, setNewActivityText] = useState("")
-  const [newActivityTime, setNewActivityTime] = useState("8:00 PM") // Default for new activity
-
-  // --- All other functions (handleEditActivity, handleSaveEdit, etc.) remain the same ---
-  // --- The JSX for rendering the dropdown and timeline also remains the same ---
+  const [newActivityTime, setNewActivityTime] = useState("8:00 PM")
 
   const handleEditActivity = (activity: Activity) => {
     setEditingActivityId(activity.id)
@@ -325,27 +326,26 @@ export default function ItineraryChannel({ user }: ItineraryChannelProps) {
       })
       setItineraryDays(updatedDays)
       setNewActivityText("")
-      // Increment default time for next new activity slightly
       const lastTime = newActivityTime.match(/(\d+):(\d+)\s*(AM|PM)/i)
       if (lastTime) {
         let hours = Number.parseInt(lastTime[1])
         const minutes = Number.parseInt(lastTime[2])
         const period = lastTime[3].toUpperCase()
         if (period === "PM" && hours !== 12) hours += 12
-        if (period === "AM" && hours === 12) hours = 0 // Midnight case
+        if (period === "AM" && hours === 12) hours = 0
 
         const date = new Date()
-        date.setHours(hours, minutes + 30) // Add 30 mins
+        date.setHours(hours, minutes + 30)
 
         let nextHours = date.getHours()
         const nextMinutes = date.getMinutes()
         const nextPeriod = nextHours >= 12 ? "PM" : "AM"
         if (nextHours > 12) nextHours -= 12
-        if (nextHours === 0) nextHours = 12 // Midnight to 12 AM
+        if (nextHours === 0) nextHours = 12
 
         setNewActivityTime(`${nextHours}:${nextMinutes.toString().padStart(2, "0")} ${nextPeriod}`)
       } else {
-        setNewActivityTime("8:30 PM") // Fallback
+        setNewActivityTime("8:30 PM")
       }
     }
   }
@@ -355,14 +355,16 @@ export default function ItineraryChannel({ user }: ItineraryChannelProps) {
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100">
-      {/* Header Area */}
-      <div className="border-b border-gray-200 dark:border-gray-800 p-4">
-        <div className="hidden lg:flex items-center justify-between mb-2">
-          <div className="flex items-center space-x-2">
-            <Calendar className="h-5 w-5 text-ucsd-blue" />
-            <h1 className="text-xl font-bold text-ucsd-navy dark:text-white">Itinerary</h1>
-          </div>
-        </div>
+      {/* Updated Header Area */}
+      <div className="flex items-center p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+        <Calendar className="h-5 w-5 mr-3 text-ucsd-blue dark:text-ucsd-gold flex-shrink-0" />
+        <h1 className="text-lg font-semibold text-ucsd-navy dark:text-gray-100 truncate">Itinerary</h1>
+        {/* Optional: Add a subtitle or description if needed, similar to ChecklistChannel */}
+        {/* <p className="text-sm text-gray-600 dark:text-gray-400 ml-2 mt-0.5 truncate hidden sm:block">Trip schedule and activities</p> */}
+      </div>
+
+      {/* Day Selector - moved out of the main header for clarity, can be styled further */}
+      <div className="p-4 border-b border-gray-200 dark:border-gray-800">
         <Select value={String(selectedDayIndex)} onValueChange={(value) => setSelectedDayIndex(Number.parseInt(value))}>
           <SelectTrigger className="w-full sm:w-[280px] text-base py-2.5 h-auto bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-700 focus:ring-ucsd-gold">
             <SelectValue placeholder="Select a day" />
@@ -425,7 +427,7 @@ export default function ItineraryChannel({ user }: ItineraryChannelProps) {
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-md shadow-sm group">
+                  <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-md shadow-sm group relative">
                     <p className="text-sm sm:text-base text-gray-800 dark:text-gray-100 whitespace-pre-wrap">
                       {activity.text}
                     </p>

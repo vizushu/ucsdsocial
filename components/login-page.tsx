@@ -6,6 +6,8 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { supabase } from "@/lib/supabase"
+import { handleError } from "@/lib/error-handler"
 import type { User } from "@/app/page"
 import { ChromeIcon, GithubIcon } from "lucide-react"
 
@@ -23,8 +25,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
-    // Trigger animation after component mounts
-    const timer = setTimeout(() => setIsMounted(true), 100) // Short delay to ensure initial state is rendered
+    const timer = setTimeout(() => setIsMounted(true), 100)
     return () => clearTimeout(timer)
   }, [])
 
@@ -44,70 +45,76 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       return
     }
 
-    let endpoint = "/api/login"
-    let body: BodyInit = JSON.stringify({ email, password })
-
-    if (isSignUp) {
-      if (password !== confirmPassword) {
-        setError("Passwords do not match")
-        setIsLoading(false)
-        return
-      }
-      endpoint = "/api/signup"
-      body = JSON.stringify({ email, password })
-    }
-
     try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: body,
-      })
-      const data = await response.json()
-      if (!response.ok) {
-        setError(data.error || "An error occurred. Please try again.")
-        setIsLoading(false)
-        return
+      if (isSignUp) {
+        if (password !== confirmPassword) {
+          setError("Passwords do not match")
+          setIsLoading(false)
+          return
+        }
+
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              name: email
+                .split("@")[0]
+                .replace(/[._]/g, " ")
+                .replace(/\b\w/g, (l: string) => l.toUpperCase()),
+            },
+          },
+        })
+
+        if (signUpError) throw signUpError
+
+        if (data.user && !data.session) {
+          setError("Please check your email for a confirmation link")
+          setIsLoading(false)
+          return
+        }
+      } else {
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+
+        if (signInError) throw signInError
       }
-      onLogin(data.user)
-    } catch (err) {
-      console.error(err)
-      setError("An unexpected error occurred. Please try again.")
+    } catch (err: any) {
+      handleError(err)
+      setError(err.message || "An error occurred. Please try again.")
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleSocialLogin = (provider: "google" | "github") => {
+  const handleSocialLogin = async (provider: "google" | "github") => {
     setIsLoading(true)
     setError("")
-    // Simulate social login
-    setTimeout(() => {
-      let mockUser: User
-      if (provider === "google") {
-        mockUser = { id: `google-${Date.now()}`, name: "Google User", email: "google.user@example.com", avatar: "G" }
-      } else {
-        mockUser = { id: `github-${Date.now()}`, name: "GitHub User", email: "github.user@example.com", avatar: "GH" }
-      }
-      onLogin(mockUser)
+
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: `${window.location.origin}`,
+        },
+      })
+
+      if (error) throw error
+    } catch (err: any) {
+      handleError(err)
+      setError(err.message || "Social login failed")
       setIsLoading(false)
-    }, 1000)
+    }
   }
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100 dark:bg-gray-900 relative overflow-hidden">
-      {/* Top Image Section - This is the background */}
       <div className="absolute inset-0 z-0">
-        <Image
-          src="/images/ucsd-social-poster.png"
-          alt="UCSD Social Poster"
-          layout="fill"
-          objectFit="cover" // Switched back to cover
-          priority
-        />
+        <Image src="/images/ucsd-social-poster.png" alt="UCSD Social Poster" layout="fill" objectFit="cover" priority />
       </div>
 
-      {/* Sliding Login Panel - Adjusted transparency */}
       <div
         className={`absolute bottom-0 left-0 right-0 h-[70vh] sm:h-[60vh] 
                    bg-white/60 dark:bg-gray-800/60 backdrop-blur-md 
@@ -117,7 +124,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                    }`}
       >
         <div className="flex-grow overflow-y-auto space-y-6">
-          {/* Header Text */}
           <div className="mb-6">
             <h1 className="text-3xl sm:text-4xl font-bold text-ucsd-navy dark:text-white leading-tight">
               The Best <span className="text-ucsd-gold">UCSD</span>
@@ -126,7 +132,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             </h1>
           </div>
 
-          {/* Form */}
           <form onSubmit={handleEmailPasswordSubmit} className="space-y-5">
             <div>
               <Label htmlFor="email" className="text-gray-600 dark:text-gray-300 text-xs font-medium">
@@ -207,7 +212,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 disabled={isLoading}
                 className="bg-ucsd-gold hover:bg-yellow-500 active:bg-yellow-600 disabled:bg-yellow-300 text-ucsd-navy rounded-full w-20 h-20 sm:w-24 sm:h-24 text-lg font-semibold shadow-xl transition-all duration-200 hover:scale-105 active:scale-95 flex-shrink-0 flex items-center justify-center"
               >
-                {isLoading && !isSignUp ? (
+                {isLoading ? (
                   <div className="w-6 h-6 border-2 border-ucsd-navy border-t-transparent rounded-full animate-spin"></div>
                 ) : isSignUp ? (
                   "Sign up"
@@ -218,7 +223,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             </div>
           </form>
 
-          {/* Social Logins Separator */}
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-gray-300/70 dark:border-gray-600/70" />
@@ -230,7 +234,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             </div>
           </div>
 
-          {/* Social Login Buttons */}
           <div className="space-y-3 pb-4">
             <Button
               variant="outline"

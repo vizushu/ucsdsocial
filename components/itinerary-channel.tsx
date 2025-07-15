@@ -1,7 +1,7 @@
 "use client"
 
-import type React from "react" // Keep type import
-import { useState } from "react"
+import type React from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -30,16 +30,20 @@ import {
   CameraIcon,
   Car,
 } from "lucide-react"
-import type { User } from "@/app/page" // Assuming User type is still relevant or can be adapted
+import { supabase } from "@/lib/supabase"
+import { handleSupabaseError } from "@/lib/error-handler"
+import type { User } from "@/app/page"
 import { cn } from "@/lib/utils"
 
 interface Activity {
   id: string
   text: string
   time: string
-  icon: React.ElementType
-  iconColor: string
-  borderColor: string
+  day_index: number
+  icon_type: string
+  icon_color: string
+  border_color: string
+  created_by: string
 }
 
 interface ItineraryDay {
@@ -48,284 +52,183 @@ interface ItineraryDay {
   activities: Activity[]
 }
 
-// Props will likely change when connected to Supabase
 interface ItineraryChannelProps {
-  user?: User // Made optional for now
-  channelId?: string
-  communityId?: string
+  user: User
+  channelId: string
+  communityId: string
 }
 
-const generateId = () => Math.random().toString(36).substr(2, 9)
+const iconMap: Record<string, React.ElementType> = {
+  tent: Tent,
+  mountain: MountainSnow,
+  map: Map,
+  flame: Flame,
+  clock: Clock,
+  sunrise: Sunrise,
+  hiking: Hiking,
+  bed: Bed,
+  bike: Bike,
+  waves: Waves,
+  gamepad: Gamepad2,
+  luggage: Luggage,
+  coffee: Coffee,
+  shower: ShowerHead,
+  camera: CameraIcon,
+  car: Car,
+}
+
+const dayTemplates = [
+  {
+    day: "Day 1 – Thurs, June 19",
+    subtitle: "(Arrival / Chill Climb Day)",
+  },
+  {
+    day: "Day 2 – Fri, June 20",
+    subtitle: "(Yosemite Falls / Scenic Day)",
+  },
+  {
+    day: "Day 3 – Sat, June 21",
+    subtitle: "(Half Dome Day)",
+  },
+  {
+    day: "Day 4 – Sun, June 22",
+    subtitle: "(Recovery / Adventure Flex Day)",
+  },
+  {
+    day: "Day 5 – Mon, June 23",
+    subtitle: "(Pack + Dip Day)",
+  },
+]
 
 export default function ItineraryChannel({ user, channelId, communityId }: ItineraryChannelProps) {
-  // Data fetching from Supabase based on channelId would go here
-  // For now, keeping the static data structure
-  const [itineraryDays, setItineraryDays] = useState<ItineraryDay[]>([
-    // Day 1
-    {
-      day: "Day 1 – Thurs, June 19",
-      subtitle: "(Arrival / Chill Climb Day)",
-      activities: [
-        {
-          id: generateId(),
-          text: "Arrive early, set up camp at Upper Pines",
-          time: "2:00 PM",
-          icon: Tent,
-          iconColor: "bg-green-100 dark:bg-green-800",
-          borderColor: "border-green-500 dark:border-green-400",
-        },
-        {
-          id: generateId(),
-          text: "Warm-up bouldering session at Camp 4 boulders",
-          time: "4:00 PM",
-          icon: MountainSnow,
-          iconColor: "bg-sky-100 dark:bg-sky-800",
-          borderColor: "border-sky-500 dark:border-sky-400",
-        },
-        {
-          id: generateId(),
-          text: "Cruise around Yosemite Village, explore Ansel Adams Gallery & gift shop",
-          time: "5:30 PM",
-          icon: Map,
-          iconColor: "bg-yellow-100 dark:bg-yellow-800",
-          borderColor: "border-yellow-500 dark:border-yellow-400",
-        },
-        {
-          id: generateId(),
-          text: "Chill cookout at camp, group hang, s'mores",
-          time: "7:30 PM",
-          icon: Flame,
-          iconColor: "bg-orange-100 dark:bg-orange-800",
-          borderColor: "border-orange-500 dark:border-orange-400",
-        },
-      ],
-    },
-    // Day 2
-    {
-      day: "Day 2 – Fri, June 20",
-      subtitle: "(Yosemite Falls / Scenic Day)",
-      activities: [
-        {
-          id: generateId(),
-          text: "Bouldering Sesh Continued",
-          time: "9:00 AM",
-          icon: MountainSnow,
-          iconColor: "bg-sky-100 dark:bg-sky-800",
-          borderColor: "border-sky-500 dark:border-sky-400",
-        },
-        {
-          id: generateId(),
-          text: "Explore valley floor / Sentinel Meadow / Mirror Lake",
-          time: "1:00 PM",
-          icon: CameraIcon,
-          iconColor: "bg-purple-100 dark:bg-purple-800",
-          borderColor: "border-purple-500 dark:border-purple-400",
-        },
-        {
-          id: generateId(),
-          text: "Night campfire, hangout",
-          time: "8:00 PM",
-          icon: Flame,
-          iconColor: "bg-orange-100 dark:bg-orange-800",
-          borderColor: "border-orange-500 dark:border-orange-400",
-        },
-      ],
-    },
-    // Day 3
-    {
-      day: "Day 3 – Sat, June 21",
-      subtitle: "(Half Dome Day)",
-      activities: [
-        {
-          id: generateId(),
-          text: "Early start (4–5am)",
-          time: "4:30 AM",
-          icon: Sunrise,
-          iconColor: "bg-pink-100 dark:bg-pink-800",
-          borderColor: "border-pink-500 dark:border-pink-400",
-        },
-        {
-          id: generateId(),
-          text: "Climb the cables (permits pending)",
-          time: "7:00 AM",
-          icon: Hiking,
-          iconColor: "bg-teal-100 dark:bg-teal-800",
-          borderColor: "border-teal-500 dark:border-teal-400",
-        },
-        {
-          id: generateId(),
-          text: "Bring poles, snacks, water. It's 10–12 hrs roundtrip",
-          time: "7:05 AM",
-          icon: Luggage,
-          iconColor: "bg-gray-100 dark:bg-gray-700",
-          borderColor: "border-gray-500 dark:border-gray-400",
-        },
-        {
-          id: generateId(),
-          text: "Yosemite Falls (view or quick visit during/after Half Dome)",
-          time: "5:00 PM",
-          icon: Waves,
-          iconColor: "bg-blue-100 dark:bg-blue-800",
-          borderColor: "border-blue-500 dark:border-blue-400",
-        },
-        {
-          id: generateId(),
-          text: "Dinner & early crash",
-          time: "7:30 PM",
-          icon: Bed,
-          iconColor: "bg-indigo-100 dark:bg-indigo-800",
-          borderColor: "border-indigo-500 dark:border-indigo-400",
-        },
-      ],
-    },
-    // Day 4
-    {
-      day: "Day 4 – Sun, June 22",
-      subtitle: "(Recovery / Adventure Flex Day)",
-      activities: [
-        {
-          id: generateId(),
-          text: "Sleep in or do a short hike",
-          time: "9:00 AM",
-          icon: Bed,
-          iconColor: "bg-purple-100 dark:bg-purple-800",
-          borderColor: "border-purple-500 dark:border-purple-400",
-        },
-        {
-          id: generateId(),
-          text: "Explore other Yosemite boulders",
-          time: "11:00 AM",
-          icon: MountainSnow,
-          iconColor: "bg-sky-100 dark:bg-sky-800",
-          borderColor: "border-sky-500 dark:border-sky-400",
-        },
-        {
-          id: generateId(),
-          text: "Optional: explore rental bikes or river float",
-          time: "2:00 PM",
-          icon: Bike,
-          iconColor: "bg-lime-100 dark:bg-lime-800",
-          borderColor: "border-lime-500 dark:border-lime-400",
-        },
-        {
-          id: generateId(),
-          text: "Last night camp vibes, hangout, games",
-          time: "7:00 PM",
-          icon: Gamepad2,
-          iconColor: "bg-rose-100 dark:bg-rose-800",
-          borderColor: "border-rose-500 dark:border-rose-400",
-        },
-      ],
-    },
-    // Day 5
-    {
-      day: "Day 5 – Mon, June 23",
-      subtitle: "(Pack + Dip Day)",
-      activities: [
-        {
-          id: generateId(),
-          text: "Pack up + Brekky",
-          time: "8:00 AM",
-          icon: Coffee,
-          iconColor: "bg-amber-100 dark:bg-amber-800",
-          borderColor: "border-amber-500 dark:border-amber-400",
-        },
-        {
-          id: generateId(),
-          text: "Optional shower at Curry Village",
-          time: "9:30 AM",
-          icon: ShowerHead,
-          iconColor: "bg-cyan-100 dark:bg-cyan-800",
-          borderColor: "border-cyan-500 dark:border-cyan-400",
-        },
-        {
-          id: generateId(),
-          text: "Final Group Pics",
-          time: "10:30 AM",
-          icon: CameraIcon,
-          iconColor: "bg-pink-100 dark:bg-pink-800",
-          borderColor: "border-pink-500 dark:border-pink-400",
-        },
-        {
-          id: generateId(),
-          text: "Drive back to SD",
-          time: "11:00 AM",
-          icon: Car,
-          iconColor: "bg-slate-100 dark:bg-slate-700",
-          borderColor: "border-slate-500 dark:border-slate-400",
-        },
-      ],
-    },
-  ])
-
+  const [itineraryDays, setItineraryDays] = useState<ItineraryDay[]>([])
   const [selectedDayIndex, setSelectedDayIndex] = useState(0)
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null)
   const [editingValue, setEditingValue] = useState("")
   const [newActivityText, setNewActivityText] = useState("")
   const [newActivityTime, setNewActivityTime] = useState("8:00 PM")
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    loadActivities()
+    subscribeToActivities()
+  }, [channelId])
+
+  const loadActivities = async () => {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from("itinerary_activities")
+        .select("*")
+        .eq("channel_id", channelId)
+        .order("day_index", { ascending: true })
+        .order("time", { ascending: true })
+
+      if (error) throw error
+
+      // Group activities by day
+      const groupedActivities: ItineraryDay[] = dayTemplates.map((template, index) => ({
+        ...template,
+        activities: (data || []).filter((activity) => activity.day_index === index),
+      }))
+
+      setItineraryDays(groupedActivities)
+    } catch (error) {
+      handleSupabaseError(error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const subscribeToActivities = () => {
+    const subscription = supabase
+      .channel(`itinerary:${channelId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "itinerary_activities",
+          filter: `channel_id=eq.${channelId}`,
+        },
+        () => {
+          loadActivities() // Reload on any change
+        },
+      )
+      .subscribe()
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }
 
   const handleEditActivity = (activity: Activity) => {
     setEditingActivityId(activity.id)
     setEditingValue(activity.text)
   }
 
-  const handleSaveEdit = () => {
-    if (editingActivityId && editingValue.trim()) {
-      const updatedDays = itineraryDays.map((day, dayIdx) => {
-        if (dayIdx === selectedDayIndex) {
-          return {
-            ...day,
-            activities: day.activities.map((act) =>
-              act.id === editingActivityId ? { ...act, text: editingValue.trim() } : act,
-            ),
-          }
-        }
-        return day
-      })
-      setItineraryDays(updatedDays)
-    }
-    setEditingActivityId(null)
-    setEditingValue("")
-  }
+  const handleSaveEdit = async () => {
+    if (!editingActivityId || !editingValue.trim() || saving) return
 
-  const handleDeleteActivity = (activityId: string) => {
-    const updatedDays = itineraryDays.map((day, dayIdx) => {
-      if (dayIdx === selectedDayIndex) {
-        return {
-          ...day,
-          activities: day.activities.filter((act) => act.id !== activityId),
-        }
-      }
-      return day
-    })
-    setItineraryDays(updatedDays)
-    if (editingActivityId === activityId) {
+    try {
+      setSaving(true)
+      const { error } = await supabase
+        .from("itinerary_activities")
+        .update({ text: editingValue.trim() })
+        .eq("id", editingActivityId)
+
+      if (error) throw error
+
       setEditingActivityId(null)
       setEditingValue("")
+    } catch (error) {
+      handleSupabaseError(error)
+    } finally {
+      setSaving(false)
     }
   }
 
-  const handleAddActivity = () => {
-    if (newActivityText.trim() && newActivityTime.trim()) {
-      const newActivity: Activity = {
-        id: generateId(),
+  const handleDeleteActivity = async (activityId: string) => {
+    if (saving) return
+
+    try {
+      setSaving(true)
+      const { error } = await supabase.from("itinerary_activities").delete().eq("id", activityId)
+
+      if (error) throw error
+
+      if (editingActivityId === activityId) {
+        setEditingActivityId(null)
+        setEditingValue("")
+      }
+    } catch (error) {
+      handleSupabaseError(error)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleAddActivity = async () => {
+    if (!newActivityText.trim() || !newActivityTime.trim() || saving) return
+
+    try {
+      setSaving(true)
+      const { error } = await supabase.from("itinerary_activities").insert({
         text: newActivityText.trim(),
         time: newActivityTime.trim(),
-        icon: Clock,
-        iconColor: "bg-gray-100 dark:bg-gray-700",
-        borderColor: "border-gray-500 dark:border-gray-400",
-      }
-      const updatedDays = itineraryDays.map((day, dayIdx) => {
-        if (dayIdx === selectedDayIndex) {
-          const updatedActivities = [...day.activities, newActivity].sort((a, b) =>
-            a.time.localeCompare(b.time, undefined, { numeric: true }),
-          )
-          return { ...day, activities: updatedActivities }
-        }
-        return day
+        day_index: selectedDayIndex,
+        channel_id: channelId,
+        created_by: user.id,
+        icon_type: "clock",
+        icon_color: "bg-gray-100 dark:bg-gray-700",
+        border_color: "border-gray-500 dark:border-gray-400",
       })
-      setItineraryDays(updatedDays)
+
+      if (error) throw error
+
       setNewActivityText("")
+      // Auto-increment time by 30 minutes
       const lastTime = newActivityTime.match(/(\d+):(\d+)\s*(AM|PM)/i)
       if (lastTime) {
         let hours = Number.parseInt(lastTime[1])
@@ -344,26 +247,33 @@ export default function ItineraryChannel({ user, channelId, communityId }: Itine
         if (nextHours === 0) nextHours = 12
 
         setNewActivityTime(`${nextHours}:${nextMinutes.toString().padStart(2, "0")} ${nextPeriod}`)
-      } else {
-        setNewActivityTime("8:30 PM")
       }
+    } catch (error) {
+      handleSupabaseError(error)
+    } finally {
+      setSaving(false)
     }
   }
 
   const currentDayData = itineraryDays[selectedDayIndex]
   const currentActivities = currentDayData?.activities || []
 
+  if (loading) {
+    return (
+      <div className="flex flex-col h-full bg-white dark:bg-gray-950 items-center justify-center">
+        <div className="w-8 h-8 border-2 border-ucsd-gold border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-gray-600 dark:text-gray-400">Loading itinerary...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100">
-      {/* Updated Header Area */}
       <div className="flex items-center p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
         <Calendar className="h-5 w-5 mr-3 text-ucsd-blue dark:text-ucsd-gold flex-shrink-0" />
         <h1 className="text-lg font-semibold text-ucsd-navy dark:text-gray-100 truncate">Itinerary</h1>
-        {/* Optional: Add a subtitle or description if needed, similar to ChecklistChannel */}
-        {/* <p className="text-sm text-gray-600 dark:text-gray-400 ml-2 mt-0.5 truncate hidden sm:block">Trip schedule and activities</p> */}
       </div>
 
-      {/* Day Selector - moved out of the main header for clarity, can be styled further */}
       <div className="p-4 border-b border-gray-200 dark:border-gray-800">
         <Select value={String(selectedDayIndex)} onValueChange={(value) => setSelectedDayIndex(Number.parseInt(value))}>
           <SelectTrigger className="w-full sm:w-[280px] text-base py-2.5 h-auto bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-700 focus:ring-ucsd-gold">
@@ -379,7 +289,6 @@ export default function ItineraryChannel({ user, channelId, communityId }: Itine
         </Select>
       </div>
 
-      {/* Timeline Area */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         <div className="max-w-2xl mx-auto">
           {currentDayData && (
@@ -389,71 +298,87 @@ export default function ItineraryChannel({ user, channelId, communityId }: Itine
             </div>
           )}
 
-          {currentActivities.map((activity, index) => (
-            <div key={activity.id} className="flex items-start space-x-3 sm:space-x-4 relative pb-8">
-              <div className="flex flex-col items-center">
-                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap mt-1 w-16 text-right">
-                  {activity.time}
-                </p>
-                {index < currentActivities.length - 1 && (
-                  <div className="mt-2 w-px h-full bg-gray-300 dark:bg-gray-700 min-h-[40px]"></div>
-                )}
-              </div>
-              <div
-                className={cn(
-                  "flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-gray-700 dark:text-gray-200 -ml-[22px] sm:-ml-[26px] border-2 z-10 relative",
-                  activity.iconColor,
-                  activity.borderColor,
-                )}
-              >
-                <activity.icon className="w-5 h-5 sm:w-6 sm:h-6" />
-              </div>
-              <div className="flex-1 pt-1 min-w-0">
-                {editingActivityId === activity.id ? (
-                  <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-md shadow-sm space-y-2">
-                    <Textarea
-                      value={editingValue}
-                      onChange={(e) => setEditingValue(e.target.value)}
-                      className="w-full text-sm min-h-[60px] bg-white dark:bg-gray-700 border-ucsd-gold focus:ring-ucsd-gold"
-                      rows={3}
-                    />
-                    <div className="flex justify-end space-x-2">
-                      <Button size="sm" variant="ghost" onClick={() => setEditingActivityId(null)}>
-                        <X className="h-4 w-4 mr-1" /> Cancel
-                      </Button>
-                      <Button size="sm" onClick={handleSaveEdit} className="bg-ucsd-blue text-white">
-                        <Check className="h-4 w-4 mr-1" /> Save
-                      </Button>
+          {currentActivities.map((activity, index) => {
+            const IconComponent = iconMap[activity.icon_type] || Clock
+            return (
+              <div key={activity.id} className="flex items-start space-x-3 sm:space-x-4 relative pb-8">
+                <div className="flex flex-col items-center">
+                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap mt-1 w-16 text-right">
+                    {activity.time}
+                  </p>
+                  {index < currentActivities.length - 1 && (
+                    <div className="mt-2 w-px h-full bg-gray-300 dark:bg-gray-700 min-h-[40px]"></div>
+                  )}
+                </div>
+                <div
+                  className={cn(
+                    "flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-gray-700 dark:text-gray-200 -ml-[22px] sm:-ml-[26px] border-2 z-10 relative",
+                    activity.icon_color,
+                    activity.border_color,
+                  )}
+                >
+                  <IconComponent className="w-5 h-5 sm:w-6 sm:h-6" />
+                </div>
+                <div className="flex-1 pt-1 min-w-0">
+                  {editingActivityId === activity.id ? (
+                    <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-md shadow-sm space-y-2">
+                      <Textarea
+                        value={editingValue}
+                        onChange={(e) => setEditingValue(e.target.value)}
+                        className="w-full text-sm min-h-[60px] bg-white dark:bg-gray-700 border-ucsd-gold focus:ring-ucsd-gold"
+                        rows={3}
+                        disabled={saving}
+                      />
+                      <div className="flex justify-end space-x-2">
+                        <Button size="sm" variant="ghost" onClick={() => setEditingActivityId(null)} disabled={saving}>
+                          <X className="h-4 w-4 mr-1" /> Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={handleSaveEdit}
+                          className="bg-ucsd-blue text-white"
+                          disabled={saving}
+                        >
+                          {saving ? (
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1"></div>
+                          ) : (
+                            <Check className="h-4 w-4 mr-1" />
+                          )}
+                          Save
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-md shadow-sm group relative">
-                    <p className="text-sm sm:text-base text-gray-800 dark:text-gray-100 whitespace-pre-wrap">
-                      {activity.text}
-                    </p>
-                    <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-gray-500 hover:text-ucsd-blue"
-                        onClick={() => handleEditActivity(activity)}
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-gray-500 hover:text-red-500"
-                        onClick={() => handleDeleteActivity(activity.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                  ) : (
+                    <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-md shadow-sm group relative">
+                      <p className="text-sm sm:text-base text-gray-800 dark:text-gray-100 whitespace-pre-wrap">
+                        {activity.text}
+                      </p>
+                      <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-gray-500 hover:text-ucsd-blue"
+                          onClick={() => handleEditActivity(activity)}
+                          disabled={saving}
+                        >
+                          <Edit3 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-gray-500 hover:text-red-500"
+                          onClick={() => handleDeleteActivity(activity.id)}
+                          disabled={saving}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
 
           <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-800">
             <h3 className="text-lg font-semibold mb-3 text-ucsd-navy dark:text-white">Add New Activity</h3>
@@ -463,19 +388,26 @@ export default function ItineraryChannel({ user, channelId, communityId }: Itine
                 value={newActivityText}
                 onChange={(e) => setNewActivityText(e.target.value)}
                 className="bg-white dark:bg-gray-700"
+                disabled={saving}
               />
               <Input
                 placeholder="Time (e.g., 7:00 PM)"
                 value={newActivityTime}
                 onChange={(e) => setNewActivityTime(e.target.value)}
                 className="bg-white dark:bg-gray-700"
+                disabled={saving}
               />
               <Button
                 onClick={handleAddActivity}
                 className="w-full bg-ucsd-gold hover:bg-ucsd-gold/90 text-ucsd-navy"
-                disabled={!newActivityText.trim() || !newActivityTime.trim()}
+                disabled={!newActivityText.trim() || !newActivityTime.trim() || saving}
               >
-                <Plus className="h-4 w-4 mr-2" /> Add to Schedule
+                {saving ? (
+                  <div className="w-4 h-4 border-2 border-ucsd-navy border-t-transparent rounded-full animate-spin mr-2"></div>
+                ) : (
+                  <Plus className="h-4 w-4 mr-2" />
+                )}
+                Add to Schedule
               </Button>
             </div>
           </div>

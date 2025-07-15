@@ -1,18 +1,18 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Hash, Settings, Search, Plus, Menu, ExternalLink } from "lucide-react" // Added ExternalLink
+import { ArrowLeft, Hash, Settings, Search, Plus, Menu, ExternalLink } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import { handleSupabaseError } from "@/lib/error-handler"
 import type { User, Community, Channel } from "@/app/page"
 import ChatChannel from "@/components/chat-channel"
 import ItineraryChannel from "@/components/itinerary-channel"
 import ChecklistChannel from "@/components/checklist-channel"
 import FoodDietaryChannel from "@/components/food-dietary-channel"
 
-// Note: For this to be type-safe, the global `Channel` type definition
-// in `app/page.tsx` should be updated to include an optional `href?: string`.
 interface CommunityPageProps {
   user: User
   community: Community
@@ -22,37 +22,77 @@ interface CommunityPageProps {
 
 export default function CommunityPage({ user, community, onBack, onLogout }: CommunityPageProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [activeChannel, setActiveChannel] = useState("itinerary")
+  const [activeChannel, setActiveChannel] = useState("chat")
   const [searchQuery, setSearchQuery] = useState("")
+  const [channels, setChannels] = useState<Channel[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const channels: (Channel & { href?: string })[] = [
-    { id: "chat", name: "chat", type: "text", unreadCount: 3 },
-    { id: "itinerary", name: "itinerary", type: "text" },
-    { id: "gear-checklist", name: "gear-checklist", type: "text" },
-    { id: "food-dietary", name: "food-dietary", type: "text" },
-    {
-      id: "spotify-jam",
-      name: "spotify-jam",
-      type: "link",
-      href: "https://open.spotify.com/jam/placeholder-jam-id", // Example link
-    },
-  ]
+  useEffect(() => {
+    loadChannels()
+  }, [community.id])
+
+  const loadChannels = async () => {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from("channels")
+        .select("*")
+        .eq("community_id", community.id)
+        .order("created_at", { ascending: true })
+
+      if (error) throw error
+
+      const channelsWithUnread = (data || []).map((channel) => ({
+        id: channel.id,
+        name: channel.name,
+        type: channel.type as "text" | "voice" | "link",
+        href: channel.href,
+        unreadCount: channel.name === "chat" ? Math.floor(Math.random() * 5) : undefined, // Mock unread count
+      }))
+
+      setChannels(channelsWithUnread)
+
+      // Set default active channel
+      if (channelsWithUnread.length > 0) {
+        const defaultChannel = channelsWithUnread.find((c) => c.name === "chat") || channelsWithUnread[0]
+        setActiveChannel(defaultChannel.id)
+      }
+    } catch (error) {
+      handleSupabaseError(error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const filteredChannels = channels.filter((channel) => channel.name.toLowerCase().includes(searchQuery.toLowerCase()))
 
   const renderChannelContent = () => {
-    switch (activeChannel) {
+    const channel = channels.find((c) => c.id === activeChannel)
+    if (!channel) return null
+
+    switch (channel.name) {
       case "chat":
-        return <ChatChannel user={user} />
+        return <ChatChannel user={user} channelId={channel.id} communityId={community.id} />
       case "itinerary":
-        return <ItineraryChannel user={user} />
+        return <ItineraryChannel user={user} channelId={channel.id} communityId={community.id} />
       case "gear-checklist":
-        return <ChecklistChannel user={user} />
+        return <ChecklistChannel user={user} channelId={channel.id} communityId={community.id} />
       case "food-dietary":
-        return <FoodDietaryChannel />
+        return <FoodDietaryChannel channelId={channel.id} communityId={community.id} />
       default:
-        return <ItineraryChannel user={user} />
+        return <ChatChannel user={user} channelId={channel.id} communityId={community.id} />
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#F0F0F0] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-ucsd-gold border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading community...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -166,7 +206,7 @@ export default function CommunityPage({ user, community, onBack, onLogout }: Com
                         {channel.name}
                       </span>
                     </div>
-                    {channel.unreadCount && channel.id === "chat" && (
+                    {channel.unreadCount && channel.unreadCount > 0 && (
                       <Badge className="bg-red-500 text-white text-xs h-5 w-5 rounded-full flex items-center justify-center p-0">
                         {channel.unreadCount}
                       </Badge>
@@ -205,7 +245,7 @@ export default function CommunityPage({ user, community, onBack, onLogout }: Com
               onClick={onBack}
               variant="outline"
               size="sm"
-              className="w-full text-[#182B49] border-[#182B49] hover:bg-[#182B49] hover:text-white"
+              className="w-full text-[#182B49] border-[#182B49] hover:bg-[#182B49] hover:text-white bg-transparent"
               style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif" }}
             >
               <ArrowLeft className="h-4 w-4 mr-2" />

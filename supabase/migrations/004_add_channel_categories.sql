@@ -81,3 +81,29 @@ SET category_id = (
   LIMIT 1
 )
 WHERE category_id IS NULL;
+
+-- Add some additional categories for trip planning communities
+INSERT INTO channel_categories (name, community_id, position, created_by)
+SELECT 
+  'Trip Planning' as name,
+  c.id as community_id,
+  1 as position,
+  c.created_by as created_by
+FROM communities c
+WHERE (c.name ILIKE '%trip%' OR c.name ILIKE '%yosemite%')
+AND NOT EXISTS (
+  SELECT 1 FROM channel_categories cc 
+  WHERE cc.community_id = c.id AND cc.name = 'Trip Planning'
+);
+
+INSERT INTO channel_categories (name, community_id, position, created_by)
+SELECT 
+  'Voice Channels' as name,
+  c.id as community_id,
+  2 as position,
+  c.created_by as created_by
+FROM communities c
+WHERE NOT EXISTS (
+  SELECT 1 FROM channel_categories cc 
+  WHERE cc.community_id = c.id AND cc.name = 'Voice Channels'
+);

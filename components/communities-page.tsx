@@ -1,381 +1,348 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { supabase, isSupabaseConfigured } from "@/lib/supabase"
+import { supabase, isDemoMode, demoData } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Search, Star, Users, Plus, LogOut } from "lucide-react"
-import { toast } from "sonner"
-import type { User, Community } from "@/app/page"
+import { Users, Star, LogOut } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { toast } from "sonner"
+
+interface User {
+  id: string
+  name: string
+  email: string
+  avatar: string
+}
+
+interface Community {
+  id: string
+  name: string
+  description: string
+  icon: string
+  member_count: number
+  created_at: string
+  created_by: string
+}
 
 interface CommunitiesPageProps {
   user: User
-  onSelectCommunity: (community: Community) => void
+  onCommunitySelect: (community: Community) => void
   onLogout: () => void
 }
 
-// Demo communities for when Supabase is not configured
-const demoCommunities: Community[] = [
-  {
-    id: "demo-climbing",
-    name: "UCSD Climbing",
-    description: "Rock climbing adventures and trips",
-    icon: "🧗",
-    member_count: 234,
-    is_starred: true,
-    is_member: true,
-  },
-  {
-    id: "demo-cse",
-    name: "CSE Students",
-    description: "Computer Science & Engineering community",
-    icon: "💻",
-    member_count: 1205,
-    is_starred: true,
-    is_member: true,
-  },
-  {
-    id: "demo-gaming",
-    name: "Triton Gaming",
-    description: "Gaming community for UCSD students",
-    icon: "🎮",
-    member_count: 892,
-    is_starred: false,
-    is_member: true,
-  },
-  {
-    id: "demo-premed",
-    name: "Pre-Med Tritons",
-    description: "Pre-medical students support group",
-    icon: "🏥",
-    member_count: 567,
-    is_starred: false,
-    is_member: false,
-  },
-  {
-    id: "demo-surf",
-    name: "UCSD Surf Club",
-    description: "Surfing and beach activities",
-    icon: "🏄",
-    member_count: 445,
-    is_starred: false,
-    is_member: false,
-  },
-  {
-    id: "demo-photo",
-    name: "UCSD Photography",
-    description: "Photography enthusiasts and workshops",
-    icon: "📸",
-    member_count: 321,
-    is_starred: false,
-    is_member: false,
-  },
-]
-
-export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: CommunitiesPageProps) {
+export default function CommunitiesPage({ user, onCommunitySelect, onLogout }: CommunitiesPageProps) {
   const [communities, setCommunities] = useState<Community[]>([])
-  const [searchQuery, setSearchQuery] = useState("")
+  const [starredCommunities, setStarredCommunities] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
-  const [joiningCommunity, setJoiningCommunity] = useState<string | null>(null)
-  const [isDemo, setIsDemo] = useState(false)
 
   useEffect(() => {
     loadCommunities()
-  }, [user.id])
+  }, [])
 
   const loadCommunities = async () => {
     try {
-      const configured = isSupabaseConfigured()
-      setIsDemo(!configured)
-
-      if (!configured) {
-        // Demo mode - use static data
-        console.log("🎭 Loading demo communities")
-        setCommunities(demoCommunities)
+      if (isDemoMode()) {
+        // Use demo data
+        setCommunities(
+          demoData.communities.map((c) => ({
+            ...c,
+            icon: c.name.charAt(0).toUpperCase(),
+          })),
+        )
         setLoading(false)
         return
       }
 
-      // Real database mode
-      console.log("🗄️ Loading communities from database")
-
-      // Get all communities with member counts
-      const { data: allCommunities, error: communitiesError } = await supabase
+      // Load communities from Supabase
+      const { data: communitiesData, error: communitiesError } = await supabase
         .from("communities")
         .select("*")
-        .order("member_count", { ascending: false })
+        .order("created_at", { ascending: false })
 
       if (communitiesError) throw communitiesError
 
-      // Get user's memberships
-      const { data: memberships, error: membershipsError } = await supabase
+      // Load starred communities
+      const { data: starredData, error: starredError } = await supabase
         .from("community_members")
-        .select("community_id, is_starred")
+        .select("community_id")
         .eq("user_id", user.id)
+        .eq("is_starred", true)
 
-      if (membershipsError) throw membershipsError
+      if (starredError) throw starredError
 
-      // Combine data
-      const communitiesWithMembership = (allCommunities || []).map((community) => {
-        const membership = memberships?.find((m) => m.community_id === community.id)
-        return {
-          ...community,
-          is_member: !!membership,
-          is_starred: membership?.is_starred || false,
-        }
-      })
+      const starred = new Set(starredData?.map((s) => s.community_id) || [])
+      setStarredCommunities(starred)
 
-      setCommunities(communitiesWithMembership)
-    } catch (error: any) {
+      // Add icons to communities
+      const communitiesWithIcons = (communitiesData || []).map((community) => ({
+        ...community,
+        icon: community.name.charAt(0).toUpperCase(),
+      }))
+
+      setCommunities(communitiesWithIcons)
+    } catch (error) {
       console.error("Error loading communities:", error)
-
-      // Fallback to demo data on error
-      console.log("🎭 Falling back to demo communities")
-      setCommunities(demoCommunities)
-      setIsDemo(true)
-
-      if (!error.message?.includes("Demo mode")) {
-        toast.error("Using demo data - database not available")
-      }
+      toast.error("Failed to load communities")
     } finally {
       setLoading(false)
     }
   }
 
-  const handleJoinCommunity = async (communityId: string) => {
-    if (isDemo) {
-      // Demo mode - simulate joining
-      setCommunities((prev) =>
-        prev.map((c) => (c.id === communityId ? { ...c, is_member: true, member_count: c.member_count + 1 } : c)),
-      )
-      toast.success("Joined community! (Demo mode)")
+  const toggleStar = async (communityId: string) => {
+    if (isDemoMode()) {
+      // Demo mode - just update local state
+      setStarredCommunities((prev) => {
+        const newSet = new Set(prev)
+        if (newSet.has(communityId)) {
+          newSet.delete(communityId)
+          toast.success("Removed from favorites")
+        } else {
+          newSet.add(communityId)
+          toast.success("Added to favorites")
+        }
+        return newSet
+      })
       return
     }
 
     try {
-      setJoiningCommunity(communityId)
+      const isStarred = starredCommunities.has(communityId)
 
-      const { error } = await supabase.from("community_members").insert({
-        user_id: user.id,
-        community_id: communityId,
-        is_starred: false,
-      })
+      if (isStarred) {
+        // Unstar
+        const { error } = await supabase
+          .from("community_members")
+          .update({ is_starred: false })
+          .eq("user_id", user.id)
+          .eq("community_id", communityId)
 
-      if (error) throw error
+        if (error) throw error
 
-      toast.success("Joined community!")
-      loadCommunities()
-    } catch (error: any) {
+        setStarredCommunities((prev) => {
+          const newSet = new Set(prev)
+          newSet.delete(communityId)
+          return newSet
+        })
+        toast.success("Removed from favorites")
+      } else {
+        // Star
+        const { error } = await supabase.from("community_members").upsert({
+          user_id: user.id,
+          community_id: communityId,
+          is_starred: true,
+        })
+
+        if (error) throw error
+
+        setStarredCommunities((prev) => new Set([...prev, communityId]))
+        toast.success("Added to favorites")
+      }
+    } catch (error) {
+      console.error("Error toggling star:", error)
+      toast.error("Failed to update favorites")
+    }
+  }
+
+  const handleJoinCommunity = async (community: Community) => {
+    if (isDemoMode()) {
+      // Demo mode - directly select community
+      onCommunitySelect(community)
+      return
+    }
+
+    try {
+      // Check if already a member
+      const { data: existingMember } = await supabase
+        .from("community_members")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("community_id", community.id)
+        .single()
+
+      if (!existingMember) {
+        // Join the community
+        const { error } = await supabase.from("community_members").insert({
+          user_id: user.id,
+          community_id: community.id,
+          role: "member",
+        })
+
+        if (error) throw error
+        toast.success(`Joined ${community.name}!`)
+      }
+
+      onCommunitySelect(community)
+    } catch (error) {
       console.error("Error joining community:", error)
       toast.error("Failed to join community")
-    } finally {
-      setJoiningCommunity(null)
     }
   }
-
-  const handleToggleStar = async (communityId: string, currentStarred: boolean) => {
-    if (isDemo) {
-      // Demo mode - simulate starring
-      setCommunities((prev) => prev.map((c) => (c.id === communityId ? { ...c, is_starred: !currentStarred } : c)))
-      toast.success(currentStarred ? "Unstarred community! (Demo)" : "Starred community! (Demo)")
-      return
-    }
-
-    try {
-      const { error } = await supabase
-        .from("community_members")
-        .update({ is_starred: !currentStarred })
-        .eq("user_id", user.id)
-        .eq("community_id", communityId)
-
-      if (error) throw error
-
-      toast.success(currentStarred ? "Unstarred community" : "Starred community")
-      loadCommunities()
-    } catch (error: any) {
-      console.error("Error toggling star:", error)
-      toast.error("Failed to update community")
-    }
-  }
-
-  const filteredCommunities = communities.filter(
-    (community) =>
-      community.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      community.description.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
-
-  const starredCommunities = filteredCommunities.filter((c) => c.is_starred && c.is_member)
-  const otherCommunities = filteredCommunities.filter((c) => !c.is_starred || !c.is_member)
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-ucsd-gold border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading communities...</p>
+          <p className="text-gray-600 dark:text-gray-300">Loading communities...</p>
         </div>
       </div>
     )
   }
 
+  const starredCommunitiesList = communities.filter((c) => starredCommunities.has(c.id))
+  const otherCommunities = communities.filter((c) => !starredCommunities.has(c.id))
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <div className="bg-white border-b px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-ucsd-navy rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">UC</span>
+      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center space-x-4">
+              <div className="w-8 h-8 bg-ucsd-gold rounded-lg flex items-center justify-center">
+                <span className="text-ucsd-navy font-bold text-sm">UC</span>
+              </div>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white">UCSD Social</h1>
+              {isDemoMode() && (
+                <Badge
+                  variant="secondary"
+                  className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+                >
+                  Demo Mode
+                </Badge>
+              )}
             </div>
-            <h1 className="text-xl font-bold text-ucsd-navy">Communities</h1>
-            {isDemo && (
-              <Badge variant="outline" className="text-xs bg-ucsd-gold text-ucsd-navy">
-                Demo Mode
-              </Badge>
-            )}
-          </div>
-          <div className="flex items-center space-x-2">
-            <ThemeToggle />
-            <Button variant="ghost" size="sm" onClick={onLogout}>
-              <LogOut className="h-4 w-4" />
-            </Button>
+
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 bg-ucsd-blue rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">{user.avatar}</span>
+                </div>
+                <div className="hidden sm:block">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">{user.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{user.email}</p>
+                </div>
+              </div>
+              <ThemeToggle />
+              <Button variant="ghost" size="sm" onClick={onLogout}>
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
-      {/* Search */}
-      <div className="p-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search communities..."
-            className="pl-10 bg-white border-0 rounded-xl h-12"
-          />
-        </div>
-      </div>
-      {/* Communities */}
-      <div className="px-4 space-y-6">
+
+      {/* Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Starred Communities */}
-        {starredCommunities.length > 0 && (
-          <div>
-            <h2 className="text-lg font-bold text-ucsd-navy mb-3">My Communities</h2>
-            <div className="space-y-2">
-              {starredCommunities.map((community) => (
-                <CommunityCard
-                  key={community.id}
-                  community={community}
-                  onSelect={onSelectCommunity}
-                  onJoin={handleJoinCommunity}
-                  onToggleStar={handleToggleStar}
-                  isJoining={joiningCommunity === community.id}
-                  isDemo={isDemo}
-                />
+        {starredCommunitiesList.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center space-x-2 mb-4">
+              <Star className="h-5 w-5 text-yellow-500" />
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Starred Communities</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {starredCommunitiesList.map((community) => (
+                <Card key={community.id} className="hover:shadow-lg transition-shadow cursor-pointer">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-12 h-12 bg-ucsd-navy rounded-xl flex items-center justify-center text-xl">
+                          {community.icon}
+                        </div>
+                        <div>
+                          <CardTitle className="text-lg">{community.name}</CardTitle>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <Users className="h-4 w-4 text-gray-500" />
+                            <span className="text-sm text-gray-500">{community.member_count} members</span>
+                          </div>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleStar(community.id)
+                        }}
+                      >
+                        <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <CardDescription className="mb-4">{community.description}</CardDescription>
+                    <Button
+                      onClick={() => handleJoinCommunity(community)}
+                      className="w-full bg-ucsd-blue hover:bg-ucsd-navy text-white"
+                    >
+                      Enter Community
+                    </Button>
+                  </CardContent>
+                </Card>
               ))}
             </div>
           </div>
         )}
 
-        {/* Other Communities */}
-        {otherCommunities.length > 0 && (
-          <div>
-            <h2 className="text-lg font-bold text-ucsd-navy mb-3">Discover</h2>
-            <div className="space-y-2">
-              {otherCommunities.map((community) => (
-                <CommunityCard
-                  key={community.id}
-                  community={community}
-                  onSelect={onSelectCommunity}
-                  onJoin={handleJoinCommunity}
-                  onToggleStar={handleToggleStar}
-                  isJoining={joiningCommunity === community.id}
-                  isDemo={isDemo}
-                />
-              ))}
-            </div>
+        {/* All Communities */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            {starredCommunitiesList.length > 0 ? "Other Communities" : "Communities"}
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {otherCommunities.map((community) => (
+              <Card key={community.id} className="hover:shadow-lg transition-shadow cursor-pointer">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-12 h-12 bg-ucsd-navy rounded-xl flex items-center justify-center text-xl text-white">
+                        {community.icon}
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg">{community.name}</CardTitle>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <Users className="h-4 w-4 text-gray-500" />
+                          <span className="text-sm text-gray-500">{community.member_count} members</span>
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleStar(community.id)
+                      }}
+                    >
+                      <Star className="h-4 w-4 text-gray-400 hover:text-yellow-500" />
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <CardDescription className="mb-4">{community.description}</CardDescription>
+                  <Button
+                    onClick={() => handleJoinCommunity(community)}
+                    className="w-full bg-ucsd-blue hover:bg-ucsd-navy text-white"
+                  >
+                    Join Community
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+
+        {communities.length === 0 && (
+          <div className="text-center py-12">
+            <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No communities yet</h3>
+            <p className="text-gray-500 dark:text-gray-400">Communities will appear here when they're created.</p>
           </div>
         )}
       </div>
-      <div className="h-20" /> {/* Bottom padding */}
     </div>
-  )
-}
-
-interface CommunityCardProps {
-  community: Community
-  onSelect: (community: Community) => void
-  onJoin: (communityId: string) => void
-  onToggleStar: (communityId: string, currentStarred: boolean) => void
-  isJoining: boolean
-  isDemo: boolean
-}
-
-function CommunityCard({ community, onSelect, onJoin, onToggleStar, isJoining, isDemo }: CommunityCardProps) {
-  return (
-    <Card className="bg-white border-0 shadow-sm rounded-xl hover:shadow-md transition-shadow">
-      <CardContent className="p-4">
-        <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-xl">
-            {community.icon}
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center space-x-2">
-              <h3
-                className="font-semibold text-ucsd-navy cursor-pointer hover:text-ucsd-blue"
-                onClick={() => community.is_member && onSelect(community)}
-              >
-                {community.name}
-              </h3>
-              {community.is_member && (
-                <button
-                  onClick={() => onToggleStar(community.id, community.is_starred || false)}
-                  className="hover:scale-110 transition-transform"
-                >
-                  <Star
-                    className={`h-4 w-4 ${community.is_starred ? "text-ucsd-gold fill-current" : "text-gray-400"}`}
-                  />
-                </button>
-              )}
-            </div>
-            <p className="text-sm text-gray-600 mt-1">{community.description}</p>
-            <div className="flex items-center justify-between mt-2">
-              <Badge className="bg-gray-100 text-gray-600 border-0 text-xs">
-                <Users className="h-3 w-3 mr-1" />
-                {community.member_count.toLocaleString()} members
-              </Badge>
-
-              {community.is_member ? (
-                <Button
-                  size="sm"
-                  onClick={() => onSelect(community)}
-                  className="bg-ucsd-gold hover:bg-yellow-500 text-ucsd-navy text-xs"
-                >
-                  Open
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  onClick={() => onJoin(community.id)}
-                  disabled={isJoining}
-                  className="bg-ucsd-navy hover:bg-ucsd-navy/90 text-white text-xs"
-                >
-                  {isJoining ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <Plus className="h-3 w-3 mr-1" />
-                      Join{isDemo ? " (Demo)" : ""}
-                    </>
-                  )}
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
   )
 }

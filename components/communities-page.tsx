@@ -18,7 +18,7 @@ import {
   Users,
   Plus,
 } from "lucide-react"
-import { supabase, joinCommunity, leaveCommunity, toggleStarCommunity } from "@/lib/supabase"
+import { joinCommunity, leaveCommunity, toggleStarCommunity } from "@/lib/supabase"
 import { handleSupabaseError } from "@/lib/error-handler"
 import type { User as UserType, Community } from "@/app/page"
 import { toast } from "sonner"
@@ -104,7 +104,7 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
       setLoading(true)
       console.log("Loading communities...")
 
-      // TEMPORARY: Force check environment variables
+      // Check if Supabase is configured
       const hasSupabaseUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL
       const hasSupabaseKey = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -117,7 +117,23 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
         return
       }
 
-      // Try database connection
+      // Import and check Supabase configuration
+      const { isSupabaseConfigured } = await import("@/lib/supabase")
+
+      if (!isSupabaseConfigured()) {
+        console.log("❌ Supabase not configured - using fallback")
+        setCommunities(fallbackCommunities)
+        setUsingFallback(true)
+        return
+      }
+
+      console.log("✅ Supabase configured - attempting database connection")
+      setUsingFallback(false)
+
+      // Import Supabase client only after confirming it's configured
+      const { supabase } = await import("@/lib/supabase")
+
+      // Test database connection first
       try {
         const { data: testData, error: testError } = await supabase.from("communities").select("id").limit(1)
 
@@ -129,7 +145,6 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
         }
 
         console.log("✅ Database connection successful")
-        setUsingFallback(false)
       } catch (connectionError) {
         console.log("❌ Database connection error:", connectionError)
         setCommunities(fallbackCommunities)
@@ -193,7 +208,13 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
   }
 
   const getCommunityMemberCount = async (communityId: string): Promise<number> => {
+    if (usingFallback) {
+      // Return random count for demo mode
+      return Math.floor(Math.random() * 1000) + 100
+    }
+
     try {
+      const { supabase } = await import("@/lib/supabase")
       const { count, error } = await supabase
         .from("community_members")
         .select("*", { count: "exact", head: true })

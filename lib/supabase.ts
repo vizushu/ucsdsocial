@@ -36,6 +36,131 @@ export const isSupabaseConfigured = (): boolean => {
 const createDummyClient = () => {
   console.log("🎭 Creating dummy Supabase client for demo mode")
 
+  const createDummyQuery = (table: string) => ({
+    select: (columns?: string) => {
+      console.log(`🎭 Demo mode: Attempted to query ${table} table`)
+      return Promise.reject(new Error(`Demo mode: Cannot query ${table} table`))
+    },
+    insert: (data: any) => {
+      console.log(`🎭 Demo mode: Attempted to insert into ${table} table`)
+      return Promise.reject(new Error(`Demo mode: Cannot insert into ${table} table`))
+    },
+    update: (data: any) => {
+      console.log(`🎭 Demo mode: Attempted to update ${table} table`)
+      return Promise.reject(new Error(`Demo mode: Cannot update ${table} table`))
+    },
+    delete: () => {
+      console.log(`🎭 Demo mode: Attempted to delete from ${table} table`)
+      return Promise.reject(new Error(`Demo mode: Cannot delete from ${table} table`))
+    },
+    upsert: (data: any) => {
+      console.log(`🎭 Demo mode: Attempted to upsert ${table} table`)
+      return Promise.reject(new Error(`Demo mode: Cannot upsert ${table} table`))
+    },
+    eq: function (column: string, value: any) {
+      return this
+    },
+    neq: function (column: string, value: any) {
+      return this
+    },
+    gt: function (column: string, value: any) {
+      return this
+    },
+    gte: function (column: string, value: any) {
+      return this
+    },
+    lt: function (column: string, value: any) {
+      return this
+    },
+    lte: function (column: string, value: any) {
+      return this
+    },
+    like: function (column: string, pattern: string) {
+      return this
+    },
+    ilike: function (column: string, pattern: string) {
+      return this
+    },
+    is: function (column: string, value: any) {
+      return this
+    },
+    in: function (column: string, values: any[]) {
+      return this
+    },
+    contains: function (column: string, value: any) {
+      return this
+    },
+    containedBy: function (column: string, value: any) {
+      return this
+    },
+    rangeGt: function (column: string, range: string) {
+      return this
+    },
+    rangeGte: function (column: string, range: string) {
+      return this
+    },
+    rangeLt: function (column: string, range: string) {
+      return this
+    },
+    rangeLte: function (column: string, range: string) {
+      return this
+    },
+    rangeAdjacent: function (column: string, range: string) {
+      return this
+    },
+    overlaps: function (column: string, value: any) {
+      return this
+    },
+    textSearch: function (column: string, query: string) {
+      return this
+    },
+    match: function (query: Record<string, any>) {
+      return this
+    },
+    not: function (column: string, operator: string, value: any) {
+      return this
+    },
+    or: function (filters: string) {
+      return this
+    },
+    filter: function (column: string, operator: string, value: any) {
+      return this
+    },
+    order: function (column: string, options?: { ascending?: boolean }) {
+      return this
+    },
+    limit: function (count: number) {
+      return this
+    },
+    range: function (from: number, to: number) {
+      return this
+    },
+    abortSignal: function (signal: AbortSignal) {
+      return this
+    },
+    single: function () {
+      return this
+    },
+    maybeSingle: function () {
+      return this
+    },
+    csv: function () {
+      return this
+    },
+    geojson: function () {
+      return this
+    },
+    explain: function (options?: any) {
+      return this
+    },
+    rollback: function () {
+      return this
+    },
+    returns: function () {
+      return this
+    },
+  })
+
   return {
     auth: {
       signInWithPassword: () => Promise.reject(new Error("Demo mode: Use any @ucsd.edu email")),
@@ -51,13 +176,7 @@ const createDummyClient = () => {
         },
       }),
     },
-    from: (table: string) => ({
-      select: () => Promise.reject(new Error(`Demo mode: Cannot query ${table} table`)),
-      insert: () => Promise.reject(new Error(`Demo mode: Cannot insert into ${table} table`)),
-      update: () => Promise.reject(new Error(`Demo mode: Cannot update ${table} table`)),
-      delete: () => Promise.reject(new Error(`Demo mode: Cannot delete from ${table} table`)),
-      upsert: () => Promise.reject(new Error(`Demo mode: Cannot upsert ${table} table`)),
-    }),
+    from: (table: string) => createDummyQuery(table),
     channel: (name: string) => ({
       on: () => ({
         subscribe: () => {

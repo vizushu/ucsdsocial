@@ -109,7 +109,7 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
       console.log("Database setup status:", isDatabaseSetup)
 
       if (!isDatabaseSetup) {
-        console.log("Using fallback data")
+        console.log("Database not set up, using fallback data")
         setCommunities(fallbackCommunities)
         setUsingFallback(true)
         return
@@ -126,6 +126,13 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
 
       if (communitiesError) {
         console.error("Error loading communities:", communitiesError)
+        // If it's a table not found error, switch to fallback
+        if (communitiesError.code === "42P01" || communitiesError.message?.includes("does not exist")) {
+          console.log("Communities table not found, switching to fallback")
+          setCommunities(fallbackCommunities)
+          setUsingFallback(true)
+          return
+        }
         throw communitiesError
       }
 
@@ -137,6 +144,13 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
 
       if (membershipsError) {
         console.error("Error loading memberships:", membershipsError)
+        // If it's a table not found error, switch to fallback
+        if (membershipsError.code === "42P01" || membershipsError.message?.includes("does not exist")) {
+          console.log("Community members table not found, switching to fallback")
+          setCommunities(fallbackCommunities)
+          setUsingFallback(true)
+          return
+        }
         throw membershipsError
       }
 
@@ -162,6 +176,18 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
       console.log("Successfully loaded communities:", communitiesWithData.length)
     } catch (error) {
       console.error("Error in loadCommunities:", error)
+
+      // Check if it's a database-related error
+      if (error && typeof error === "object") {
+        const errorObj = error as any
+        if (errorObj.code === "42P01" || errorObj.message?.includes("does not exist")) {
+          console.log("Database tables not found, using fallback data")
+          setCommunities(fallbackCommunities)
+          setUsingFallback(true)
+          return
+        }
+      }
+
       handleSupabaseError(error, "loading communities")
       // Fall back to static data if there's any error
       setCommunities(fallbackCommunities)
@@ -364,15 +390,27 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
 
       {/* Database Setup Notice */}
       {usingFallback && (
-        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-3">
-          <div className="flex items-center space-x-2 text-yellow-800">
-            <div className="w-4 h-4 bg-yellow-400 rounded-full flex items-center justify-center">
-              <span className="text-xs">!</span>
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-4">
+          <div className="flex items-start space-x-3 text-amber-800">
+            <div className="w-6 h-6 bg-amber-400 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+              <span className="text-sm font-bold">!</span>
             </div>
-            <p className="text-sm">
-              <strong>Demo Mode:</strong> Database not configured. Run the SQL scripts in the scripts folder to set up
-              your Supabase database.
-            </p>
+            <div className="flex-1">
+              <p className="font-semibold text-sm mb-1">Database Setup Required</p>
+              <p className="text-sm mb-2">
+                The Supabase database hasn't been configured yet. You're currently viewing demo data.
+              </p>
+              <div className="text-xs space-y-1">
+                <p>
+                  <strong>To set up your database:</strong>
+                </p>
+                <ol className="list-decimal list-inside space-y-0.5 ml-2">
+                  <li>Add the Supabase integration in v0</li>
+                  <li>Run the SQL scripts in the scripts folder</li>
+                  <li>Refresh this page</li>
+                </ol>
+              </div>
+            </div>
           </div>
         </div>
       )}

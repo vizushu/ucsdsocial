@@ -321,28 +321,32 @@ export const checkDatabaseSetup = async (): Promise<boolean> => {
   try {
     console.log("Checking database setup...")
 
-    // Try to query the communities table with a simple select
-    const { data, error } = await supabase.from("communities").select("id").limit(1)
+    // Try to query multiple tables to ensure they all exist
+    const tables = ["communities", "channels", "community_members"]
 
-    if (error) {
-      console.log("Database check error:", error)
+    for (const table of tables) {
+      const { data, error } = await supabase.from(table).select("id").limit(1)
 
-      // Check for table not found errors
-      if (
-        error.code === "42P01" ||
-        error.message?.includes("does not exist") ||
-        (error.message?.includes("relation") && error.message?.includes("does not exist"))
-      ) {
-        console.log("Database tables not found")
-        return false
+      if (error) {
+        console.log(`Database check error for table ${table}:`, error)
+
+        // Check for table not found errors
+        if (
+          error.code === "42P01" ||
+          error.message?.includes("does not exist") ||
+          error.message?.includes("relation") ||
+          error.message?.includes("table")
+        ) {
+          console.log(`Table ${table} not found`)
+          return false
+        }
+
+        // For other errors, continue checking other tables
+        console.warn(`Table ${table} exists but query failed:`, error)
       }
-
-      // For other errors, assume database exists but there's another issue
-      console.warn("Database exists but query failed:", error)
-      return true
     }
 
-    console.log("Database setup verified")
+    console.log("Database setup verified - all tables exist")
     return true
   } catch (error) {
     console.error("Error checking database setup:", error)

@@ -163,18 +163,119 @@ const createDummyClient = () => {
 
   return {
     auth: {
-      signInWithPassword: () => Promise.reject(new Error("Demo mode: Use any @ucsd.edu email")),
-      signInWithOAuth: () => Promise.reject(new Error("Demo mode: Social login not available")),
-      signUp: () => Promise.reject(new Error("Demo mode: Use any @ucsd.edu email")),
-      signOut: () => Promise.resolve({ error: null }),
-      getUser: () => Promise.resolve({ data: { user: null }, error: null }),
-      onAuthStateChange: () => ({
-        data: {
-          subscription: {
-            unsubscribe: () => console.log("🎭 Demo auth subscription unsubscribed"),
+      // Add the missing getSession method
+      getSession: () => {
+        console.log("🎭 Demo mode: getSession called")
+        return Promise.resolve({
+          data: { session: null },
+          error: null,
+        })
+      },
+      signInWithPassword: (credentials: any) => {
+        console.log("🎭 Demo mode: signInWithPassword called")
+        // Simulate successful login for @ucsd.edu emails
+        if (credentials.email && credentials.email.endsWith("@ucsd.edu")) {
+          const mockUser = {
+            id: "demo-user-" + Math.random().toString(36).substr(2, 9),
+            email: credentials.email,
+            user_metadata: {
+              name: credentials.email
+                .split("@")[0]
+                .replace(/[._]/g, " ")
+                .replace(/\b\w/g, (l: string) => l.toUpperCase()),
+            },
+          }
+
+          // Simulate auth state change
+          setTimeout(() => {
+            const authCallback = (window as any).__supabase_auth_callback
+            if (authCallback) {
+              authCallback("SIGNED_IN", { user: mockUser })
+            }
+          }, 100)
+
+          return Promise.resolve({
+            data: { user: mockUser, session: { user: mockUser } },
+            error: null,
+          })
+        } else {
+          return Promise.resolve({
+            data: { user: null, session: null },
+            error: { message: "Please use your UCSD email address" },
+          })
+        }
+      },
+      signInWithOAuth: () => {
+        console.log("🎭 Demo mode: signInWithOAuth called")
+        return Promise.resolve({
+          data: { url: null },
+          error: { message: "Demo mode: OAuth not available. Use any @ucsd.edu email instead." },
+        })
+      },
+      signUp: (credentials: any) => {
+        console.log("🎭 Demo mode: signUp called")
+        if (credentials.email && credentials.email.endsWith("@ucsd.edu")) {
+          const mockUser = {
+            id: "demo-user-" + Math.random().toString(36).substr(2, 9),
+            email: credentials.email,
+            user_metadata: credentials.options?.data || {
+              name: credentials.email
+                .split("@")[0]
+                .replace(/[._]/g, " ")
+                .replace(/\b\w/g, (l: string) => l.toUpperCase()),
+            },
+          }
+
+          // Simulate auth state change
+          setTimeout(() => {
+            const authCallback = (window as any).__supabase_auth_callback
+            if (authCallback) {
+              authCallback("SIGNED_IN", { user: mockUser })
+            }
+          }, 100)
+
+          return Promise.resolve({
+            data: { user: mockUser, session: { user: mockUser } },
+            error: null,
+          })
+        } else {
+          return Promise.resolve({
+            data: { user: null, session: null },
+            error: { message: "Please use your UCSD email address" },
+          })
+        }
+      },
+      signOut: () => {
+        console.log("🎭 Demo mode: signOut called")
+        // Simulate auth state change
+        setTimeout(() => {
+          const authCallback = (window as any).__supabase_auth_callback
+          if (authCallback) {
+            authCallback("SIGNED_OUT", null)
+          }
+        }, 100)
+        return Promise.resolve({ error: null })
+      },
+      getUser: () => {
+        console.log("🎭 Demo mode: getUser called")
+        return Promise.resolve({ data: { user: null }, error: null })
+      },
+      onAuthStateChange: (callback: Function) => {
+        console.log("🎭 Demo mode: onAuthStateChange called")
+        // Store callback for later use
+        ;(window as any).__supabase_auth_callback = callback
+
+        return {
+          data: {
+            subscription: {
+              unsubscribe: () => {
+                console.log("🎭 Demo auth subscription unsubscribed")
+                delete (window as any).__supabase_auth_callback
+              },
+            },
           },
-        },
-      }),
+        }
+      },
     },
     from: (table: string) => createDummyQuery(table),
     channel: (name: string) => ({

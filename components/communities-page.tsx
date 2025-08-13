@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabase"
+import { supabase, isSupabaseConfigured } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -16,11 +16,70 @@ interface CommunitiesPageProps {
   onLogout: () => void
 }
 
+// Demo communities for when Supabase is not configured
+const demoCommunities: Community[] = [
+  {
+    id: "demo-climbing",
+    name: "UCSD Climbing",
+    description: "Rock climbing adventures and trips",
+    icon: "🧗",
+    member_count: 234,
+    is_starred: true,
+    is_member: true,
+  },
+  {
+    id: "demo-cse",
+    name: "CSE Students",
+    description: "Computer Science & Engineering community",
+    icon: "💻",
+    member_count: 1205,
+    is_starred: true,
+    is_member: true,
+  },
+  {
+    id: "demo-gaming",
+    name: "Triton Gaming",
+    description: "Gaming community for UCSD students",
+    icon: "🎮",
+    member_count: 892,
+    is_starred: false,
+    is_member: true,
+  },
+  {
+    id: "demo-premed",
+    name: "Pre-Med Tritons",
+    description: "Pre-medical students support group",
+    icon: "🏥",
+    member_count: 567,
+    is_starred: false,
+    is_member: false,
+  },
+  {
+    id: "demo-surf",
+    name: "UCSD Surf Club",
+    description: "Surfing and beach activities",
+    icon: "🏄",
+    member_count: 445,
+    is_starred: false,
+    is_member: false,
+  },
+  {
+    id: "demo-photo",
+    name: "UCSD Photography",
+    description: "Photography enthusiasts and workshops",
+    icon: "📸",
+    member_count: 321,
+    is_starred: false,
+    is_member: false,
+  },
+]
+
 export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: CommunitiesPageProps) {
   const [communities, setCommunities] = useState<Community[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
   const [joiningCommunity, setJoiningCommunity] = useState<string | null>(null)
+  const [isDemo, setIsDemo] = useState(false)
 
   useEffect(() => {
     loadCommunities()
@@ -28,6 +87,20 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
 
   const loadCommunities = async () => {
     try {
+      const configured = isSupabaseConfigured()
+      setIsDemo(!configured)
+
+      if (!configured) {
+        // Demo mode - use static data
+        console.log("🎭 Loading demo communities")
+        setCommunities(demoCommunities)
+        setLoading(false)
+        return
+      }
+
+      // Real database mode
+      console.log("🗄️ Loading communities from database")
+
       // Get all communities with member counts
       const { data: allCommunities, error: communitiesError } = await supabase
         .from("communities")
@@ -56,14 +129,31 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
 
       setCommunities(communitiesWithMembership)
     } catch (error: any) {
-      toast.error("Failed to load communities")
       console.error("Error loading communities:", error)
+
+      // Fallback to demo data on error
+      console.log("🎭 Falling back to demo communities")
+      setCommunities(demoCommunities)
+      setIsDemo(true)
+
+      if (!error.message?.includes("Demo mode")) {
+        toast.error("Using demo data - database not available")
+      }
     } finally {
       setLoading(false)
     }
   }
 
   const handleJoinCommunity = async (communityId: string) => {
+    if (isDemo) {
+      // Demo mode - simulate joining
+      setCommunities((prev) =>
+        prev.map((c) => (c.id === communityId ? { ...c, is_member: true, member_count: c.member_count + 1 } : c)),
+      )
+      toast.success("Joined community! (Demo mode)")
+      return
+    }
+
     try {
       setJoiningCommunity(communityId)
 
@@ -78,14 +168,21 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
       toast.success("Joined community!")
       loadCommunities()
     } catch (error: any) {
-      toast.error("Failed to join community")
       console.error("Error joining community:", error)
+      toast.error("Failed to join community")
     } finally {
       setJoiningCommunity(null)
     }
   }
 
   const handleToggleStar = async (communityId: string, currentStarred: boolean) => {
+    if (isDemo) {
+      // Demo mode - simulate starring
+      setCommunities((prev) => prev.map((c) => (c.id === communityId ? { ...c, is_starred: !currentStarred } : c)))
+      toast.success(currentStarred ? "Unstarred community! (Demo)" : "Starred community! (Demo)")
+      return
+    }
+
     try {
       const { error } = await supabase
         .from("community_members")
@@ -98,8 +195,8 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
       toast.success(currentStarred ? "Unstarred community" : "Starred community")
       loadCommunities()
     } catch (error: any) {
-      toast.error("Failed to update community")
       console.error("Error toggling star:", error)
+      toast.error("Failed to update community")
     }
   }
 
@@ -133,6 +230,11 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
               <span className="text-white font-bold text-sm">UC</span>
             </div>
             <h1 className="text-xl font-bold text-ucsd-navy">Communities</h1>
+            {isDemo && (
+              <Badge variant="outline" className="text-xs bg-ucsd-gold text-ucsd-navy">
+                Demo Mode
+              </Badge>
+            )}
           </div>
           <Button variant="ghost" size="sm" onClick={onLogout}>
             <LogOut className="h-4 w-4" />
@@ -166,6 +268,7 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
                   onJoin={handleJoinCommunity}
                   onToggleStar={handleToggleStar}
                   isJoining={joiningCommunity === community.id}
+                  isDemo={isDemo}
                 />
               ))}
             </div>
@@ -185,6 +288,7 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
                   onJoin={handleJoinCommunity}
                   onToggleStar={handleToggleStar}
                   isJoining={joiningCommunity === community.id}
+                  isDemo={isDemo}
                 />
               ))}
             </div>
@@ -202,9 +306,10 @@ interface CommunityCardProps {
   onJoin: (communityId: string) => void
   onToggleStar: (communityId: string, currentStarred: boolean) => void
   isJoining: boolean
+  isDemo: boolean
 }
 
-function CommunityCard({ community, onSelect, onJoin, onToggleStar, isJoining }: CommunityCardProps) {
+function CommunityCard({ community, onSelect, onJoin, onToggleStar, isJoining, isDemo }: CommunityCardProps) {
   return (
     <Card className="bg-white border-0 shadow-sm rounded-xl hover:shadow-md transition-shadow">
       <CardContent className="p-4">
@@ -258,7 +363,7 @@ function CommunityCard({ community, onSelect, onJoin, onToggleStar, isJoining }:
                   ) : (
                     <>
                       <Plus className="h-3 w-3 mr-1" />
-                      Join
+                      Join{isDemo ? " (Demo)" : ""}
                     </>
                   )}
                 </Button>

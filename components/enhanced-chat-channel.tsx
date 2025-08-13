@@ -1,308 +1,276 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect, useRef } from "react"
+import { supabase, isDemoMode, demoData } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { supabase } from "@/lib/supabase"
-import { Send, Reply, MoreHorizontal, Hash } from "lucide-react"
+import { Send, Reply, MoreHorizontal } from "lucide-react"
+import type { User } from "@/app/page"
 
 interface Message {
   id: string
   content: string
   user_id: string
   channel_id: string
-  reply_to?: string
+  reply_to?: string | null
   created_at: string
   user?: {
     id: string
     email: string
-    full_name?: string
+    full_name: string | null
   }
-  reply_message?: {
-    id: string
-    content: string
-    user?: {
-      full_name?: string
-      email: string
-    }
-  }
-}
-
-interface TypingUser {
-  user_id: string
-  user_email: string
-  timestamp: number
 }
 
 interface EnhancedChatChannelProps {
-  channel: {
-    id: string
-    name: string
-    topic?: string
-    community_id: string
-  }
-  currentUser: any
+  channelId: string
+  channelName: string
+  user: User
 }
 
-export default function EnhancedChatChannel({ channel, currentUser }: EnhancedChatChannelProps) {
+export default function EnhancedChatChannel({ channelId, channelName, user }: EnhancedChatChannelProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
-  const [replyingTo, setReplyingTo] = useState<Message | null>(null)
-  const [typingUsers, setTypingUsers] = useState<TypingUser[]>([])
-  const [isTyping, setIsTyping] = useState(false)
+  const [replyTo, setReplyTo] = useState<Message | null>(null)
+  const [typingUsers, setTypingUsers] = useState<string[]>([])
+  const [loading, setLoading] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout>()
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }
+  useEffect(() => {
+    loadMessages()
+
+    if (!isDemoMode() && supabase) {
+      // Subscribe to new messages
+      const messagesSubscription = supabase
+        .channel(`messages:${channelId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter: `channel_id=eq.${channelId}`,
+          },
+          (payload) => {
+            const newMessage = payload.new as Message
+            setMessages((prev) => [...prev, newMessage])
+          },
+        )
+        .subscribe()
+
+      // Subscribe to typing indicators
+      const typingChannel = supabase.channel(`typing:${channelId}`)
+
+      typingChannel
+        .on("broadcast", { event: "typing" }, ({ payload }) => {
+          const { user_id, is_typing } = payload
+          setTypingUsers((prev) => {
+            if (is_typing && user_id !== user.id) {
+              return prev.includes(user_id) ? prev : [...prev, user_id]
+            } else {
+              return prev.filter((id) => id !== user_id)
+            }
+          })
+        })
+        .subscribe()
+
+      return () => {
+        messagesSubscription.unsubscribe()
+        typingChannel.unsubscribe()
+      }
+    }
+  }, [channelId, user.id])
 
   useEffect(() => {
     scrollToBottom()
   }, [messages])
 
-  // Load messages
-  useEffect(() => {
-    const loadMessages = async () => {
+  const loadMessages = async () => {
+    try {
+      if (isDemoMode() || !supabase) {
+        // Load demo messages
+        const channelMessages = demoData.messages.filter((m) => m.channel_id === channelId)
+        setMessages(channelMessages)
+        setLoading(false)
+        return
+      }
+
       const { data, error } = await supabase
         .from("messages")
         .select(`
           *,
-          user:profiles(id, email, full_name),
-          reply_message:messages!reply_to(
-            id,
-            content,
-            user:profiles(id, email, full_name)
-          )
+          user:profiles(id, email, full_name)
         `)
-        .eq("channel_id", channel.id)
+        .eq("channel_id", channelId)
         .order("created_at", { ascending: true })
+        .limit(50)
 
       if (error) {
         console.error("Error loading messages:", error)
+        // Fallback to demo data
+        const channelMessages = demoData.messages.filter((m) => m.channel_id === channelId)
+        setMessages(channelMessages)
+      } else {
+        setMessages(data || [])
+      }
+    } catch (error) {
+      console.error("Error in loadMessages:", error)
+      const channelMessages = demoData.messages.filter((m) => m.channel_id === channelId)
+      setMessages(channelMessages)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const sendMessage = async () => {
+    if (!newMessage.trim()) return
+
+    const messageContent = newMessage.trim()
+    setNewMessage("")
+    setReplyTo(null)
+
+    try {
+      if (isDemoMode() || !supabase) {
+        // Demo mode - add message locally
+        const demoMessage: Message = {
+          id: `demo-msg-${Date.now()}`,
+          content: messageContent,
+          user_id: user.id,
+          channel_id: channelId,
+          reply_to: replyTo?.id || null,
+          created_at: new Date().toISOString(),
+          user: {
+            id: user.id,
+            email: user.email,
+            full_name: user.name,
+          },
+        }
+        setMessages((prev) => [...prev, demoMessage])
         return
       }
 
-      setMessages(data || [])
-    }
-
-    loadMessages()
-  }, [channel.id])
-
-  // Real-time message subscription
-  useEffect(() => {
-    const messageSubscription = supabase
-      .channel(`messages:${channel.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `channel_id=eq.${channel.id}`,
-        },
-        async (payload) => {
-          // Fetch the complete message with user data
-          const { data } = await supabase
-            .from("messages")
-            .select(`
-              *,
-              user:profiles(id, email, full_name),
-              reply_message:messages!reply_to(
-                id,
-                content,
-                user:profiles(id, email, full_name)
-              )
-            `)
-            .eq("id", payload.new.id)
-            .single()
-
-          if (data) {
-            setMessages((prev) => [...prev, data])
-          }
-        },
-      )
-      .subscribe()
-
-    return () => {
-      messageSubscription.unsubscribe()
-    }
-  }, [channel.id])
-
-  // Typing indicators
-  useEffect(() => {
-    const typingChannel = supabase.channel(`typing:${channel.id}`)
-
-    typingChannel
-      .on("broadcast", { event: "typing" }, (payload) => {
-        const { user_id, user_email, is_typing } = payload.payload
-
-        if (user_id === currentUser?.id) return
-
-        setTypingUsers((prev) => {
-          const filtered = prev.filter((u) => u.user_id !== user_id)
-          if (is_typing) {
-            return [...filtered, { user_id, user_email, timestamp: Date.now() }]
-          }
-          return filtered
-        })
+      const { error } = await supabase.from("messages").insert({
+        content: messageContent,
+        user_id: user.id,
+        channel_id: channelId,
+        reply_to: replyTo?.id || null,
       })
-      .subscribe()
 
-    // Clean up old typing indicators
-    const cleanupInterval = setInterval(() => {
-      setTypingUsers((prev) => prev.filter((user) => Date.now() - user.timestamp < 5000))
-    }, 1000)
-
-    return () => {
-      typingChannel.unsubscribe()
-      clearInterval(cleanupInterval)
+      if (error) {
+        console.error("Error sending message:", error)
+        // Add message locally as fallback
+        const fallbackMessage: Message = {
+          id: `fallback-${Date.now()}`,
+          content: messageContent,
+          user_id: user.id,
+          channel_id: channelId,
+          reply_to: replyTo?.id || null,
+          created_at: new Date().toISOString(),
+          user: {
+            id: user.id,
+            email: user.email,
+            full_name: user.name,
+          },
+        }
+        setMessages((prev) => [...prev, fallbackMessage])
+      }
+    } catch (error) {
+      console.error("Error in sendMessage:", error)
     }
-  }, [channel.id, currentUser?.id])
+  }
 
   const handleTyping = () => {
-    if (!isTyping && currentUser) {
-      setIsTyping(true)
-      supabase.channel(`typing:${channel.id}`).send({
-        type: "broadcast",
-        event: "typing",
-        payload: {
-          user_id: currentUser.id,
-          user_email: currentUser.email,
-          is_typing: true,
-        },
-      })
-    }
+    if (isDemoMode() || !supabase) return
 
+    // Clear existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current)
     }
 
-    typingTimeoutRef.current = setTimeout(() => {
-      setIsTyping(false)
-      supabase.channel(`typing:${channel.id}`).send({
-        type: "broadcast",
-        event: "typing",
-        payload: {
-          user_id: currentUser.id,
-          user_email: currentUser.email,
-          is_typing: false,
-        },
-      })
-    }, 2000)
-  }
-
-  const sendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newMessage.trim() || !currentUser) return
-
-    const messageData = {
-      content: newMessage.trim(),
-      channel_id: channel.id,
-      user_id: currentUser.id,
-      reply_to: replyingTo?.id || null,
-    }
-
-    const { error } = await supabase.from("messages").insert([messageData])
-
-    if (error) {
-      console.error("Error sending message:", error)
-      return
-    }
-
-    setNewMessage("")
-    setReplyingTo(null)
-    setIsTyping(false)
-
-    // Stop typing indicator
-    supabase.channel(`typing:${channel.id}`).send({
+    // Send typing indicator
+    supabase.channel(`typing:${channelId}`).send({
       type: "broadcast",
       event: "typing",
-      payload: {
-        user_id: currentUser.id,
-        user_email: currentUser.email,
-        is_typing: false,
-      },
+      payload: { user_id: user.id, is_typing: true },
+    })
+
+    // Stop typing after 3 seconds
+    typingTimeoutRef.current = setTimeout(() => {
+      supabase.channel(`typing:${channelId}`).send({
+        type: "broadcast",
+        event: "typing",
+        payload: { user_id: user.id, is_typing: false },
+      })
+    }, 3000)
+  }
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
+
+  const formatTime = (timestamp: string) => {
+    return new Date(timestamp).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
     })
   }
 
-  const formatMessageTime = (timestamp: string) => {
-    const date = new Date(timestamp)
-    const now = new Date()
-    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)
-
-    if (diffInHours < 24) {
-      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    } else {
-      return date.toLocaleDateString([], { month: "short", day: "numeric" })
-    }
+  const getUserName = (message: Message) => {
+    if (message.user?.full_name) return message.user.full_name
+    if (message.user?.email) return message.user.email.split("@")[0]
+    return "Unknown User"
   }
 
-  const getUserDisplayName = (user: any) => {
-    return user?.full_name || user?.email?.split("@")[0] || "Unknown User"
-  }
-
-  const getUserAvatar = (user: any) => {
-    const name = getUserDisplayName(user)
+  const getUserAvatar = (message: Message) => {
+    const name = getUserName(message)
     return name.charAt(0).toUpperCase()
   }
 
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-muted-foreground">Loading messages...</div>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">
+    <div className="flex-1 flex flex-col h-full">
       {/* Channel Header */}
-      <div className="flex items-center gap-2 p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-        <Hash className="w-5 h-5 text-gray-500" />
-        <div className="flex-1">
-          <h2 className="font-semibold text-gray-900 dark:text-white">{channel.name}</h2>
-          {channel.topic && <p className="text-sm text-gray-500 dark:text-gray-400">{channel.topic}</p>}
-        </div>
+      <div className="border-b p-4">
+        <h2 className="text-xl font-semibold">#{channelName}</h2>
+        <p className="text-sm text-muted-foreground">Welcome to #{channelName}</p>
       </div>
 
       {/* Messages */}
       <ScrollArea className="flex-1 p-4">
         <div className="space-y-4">
           {messages.map((message) => (
-            <div key={message.id} className="group relative">
-              {message.reply_to && message.reply_message && (
-                <div className="ml-12 mb-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                  <Reply className="w-3 h-3" />
-                  <span>Replying to {getUserDisplayName(message.reply_message.user)}</span>
-                  <span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs max-w-xs truncate">
-                    {message.reply_message.content}
-                  </span>
+            <div key={message.id} className="group">
+              {message.reply_to && (
+                <div className="ml-12 mb-1 text-xs text-muted-foreground flex items-center">
+                  <Reply className="h-3 w-3 mr-1" />
+                  Replying to message
                 </div>
               )}
-
-              <div className="flex gap-3 hover:bg-gray-50 dark:hover:bg-gray-800 p-2 rounded-lg transition-colors">
-                <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
-                  {getUserAvatar(message.user)}
+              <div className="flex items-start space-x-3">
+                <div className="w-8 h-8 bg-ucsd-gold rounded-full flex items-center justify-center text-ucsd-navy font-semibold text-sm">
+                  {getUserAvatar(message)}
                 </div>
-
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline gap-2 mb-1">
-                    <span className="font-medium text-gray-900 dark:text-white text-sm">
-                      {getUserDisplayName(message.user)}
-                    </span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {formatMessageTime(message.created_at)}
-                    </span>
+                  <div className="flex items-center space-x-2">
+                    <span className="font-semibold text-sm">{getUserName(message)}</span>
+                    <span className="text-xs text-muted-foreground">{formatTime(message.created_at)}</span>
                   </div>
-
-                  <div className="text-gray-800 dark:text-gray-200 text-sm leading-relaxed break-words">
-                    {message.content}
-                  </div>
+                  <p className="text-sm mt-1 break-words">{message.content}</p>
                 </div>
-
-                {/* Message Actions */}
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => setReplyingTo(message)} className="h-6 w-6 p-0">
-                    <Reply className="w-3 h-3" />
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button variant="ghost" size="sm" onClick={() => setReplyTo(message)}>
+                    <Reply className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                    <MoreHorizontal className="w-3 h-3" />
+                  <Button variant="ghost" size="sm">
+                    <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
@@ -311,17 +279,13 @@ export default function EnhancedChatChannel({ channel, currentUser }: EnhancedCh
 
           {/* Typing Indicators */}
           {typingUsers.length > 0 && (
-            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 ml-12">
-              <div className="flex gap-1">
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+            <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 bg-current rounded-full animate-bounce" />
+                <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: "0.1s" }} />
+                <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
               </div>
-              <span>
-                {typingUsers.length === 1
-                  ? `${typingUsers[0].user_email.split("@")[0]} is typing...`
-                  : `${typingUsers.length} people are typing...`}
-              </span>
+              <span>Someone is typing...</span>
             </div>
           )}
 
@@ -330,40 +294,43 @@ export default function EnhancedChatChannel({ channel, currentUser }: EnhancedCh
       </ScrollArea>
 
       {/* Reply Preview */}
-      {replyingTo && (
-        <div className="px-4 py-2 bg-gray-100 dark:bg-gray-700 border-l-4 border-blue-500">
+      {replyTo && (
+        <div className="border-t border-b p-2 bg-muted/50">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm">
-              <Reply className="w-4 h-4 text-gray-500" />
-              <span className="text-gray-600 dark:text-gray-300">
-                Replying to {getUserDisplayName(replyingTo.user)}
-              </span>
-              <span className="text-gray-500 dark:text-gray-400 max-w-xs truncate">{replyingTo.content}</span>
+            <div className="flex items-center space-x-2 text-sm">
+              <Reply className="h-4 w-4" />
+              <span>Replying to {getUserName(replyTo)}</span>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => setReplyingTo(null)} className="h-6 w-6 p-0">
+            <Button variant="ghost" size="sm" onClick={() => setReplyTo(null)}>
               ×
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground mt-1 truncate">{replyTo.content}</p>
         </div>
       )}
 
       {/* Message Input */}
-      <div className="p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
-        <form onSubmit={sendMessage} className="flex gap-2">
+      <div className="border-t p-4">
+        <div className="flex space-x-2">
           <Input
             value={newMessage}
             onChange={(e) => {
               setNewMessage(e.target.value)
               handleTyping()
             }}
-            placeholder={`Message #${channel.name}`}
+            onKeyPress={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault()
+                sendMessage()
+              }
+            }}
+            placeholder={`Message #${channelName}`}
             className="flex-1"
-            disabled={!currentUser}
           />
-          <Button type="submit" disabled={!newMessage.trim() || !currentUser}>
-            <Send className="w-4 h-4" />
+          <Button onClick={sendMessage} disabled={!newMessage.trim()}>
+            <Send className="h-4 w-4" />
           </Button>
-        </form>
+        </div>
       </div>
     </div>
   )

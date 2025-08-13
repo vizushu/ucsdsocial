@@ -1,9 +1,21 @@
 import { createClient } from "@supabase/supabase-js"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Check if Supabase is properly configured
+export const isSupabaseConfigured = () => {
+  return !!(
+    supabaseUrl &&
+    supabaseAnonKey &&
+    supabaseUrl.startsWith("https://") &&
+    supabaseUrl.includes(".supabase.co") &&
+    supabaseAnonKey.length > 100
+  )
+}
+
+// Create Supabase client only if properly configured
+export const supabase = isSupabaseConfigured() ? createClient(supabaseUrl!, supabaseAnonKey!) : null
 
 // Enhanced types for the new schema
 export interface Database {
@@ -263,7 +275,7 @@ export const demoData = {
 
 // Helper function to check if we're in demo mode
 export const isDemoMode = () => {
-  return !supabaseUrl || supabaseUrl.includes("placeholder") || !supabaseAnonKey
+  return !isSupabaseConfigured()
 }
 
 // Enhanced error handling

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabase"
+import { supabase, isDemoMode } from "@/lib/supabase"
 import LoginPage from "@/components/login-page"
 import CommunitiesPage from "@/components/communities-page"
 import CommunityPage from "@/components/community-page"
@@ -23,26 +23,60 @@ export interface Community {
   created_by: string
 }
 
-export interface Channel {
-  id: string
-  name: string
-  type: "text" | "voice" | "link"
-  community_id: string
-  category_id?: string
-  topic?: string
-  href?: string
-  position: number
-  created_at: string
-}
-
 export default function Home() {
   const [user, setUser] = useState<User | null>(null)
   const [selectedCommunity, setSelectedCommunity] = useState<Community | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Check for existing session
-    const checkSession = async () => {
+    // Check for demo mode first
+    if (isDemoMode() || !supabase) {
+      console.log("Running in demo mode")
+
+      // Check for stored demo user
+      const storedUser = localStorage.getItem("demo_user")
+      if (storedUser) {
+        try {
+          const demoUser = JSON.parse(storedUser)
+          setUser({
+            id: demoUser.id,
+            name: demoUser.user_metadata?.name || demoUser.email.split("@")[0],
+            email: demoUser.email,
+            avatar: demoUser.user_metadata?.name?.charAt(0) || demoUser.email.charAt(0).toUpperCase(),
+          })
+        } catch (error) {
+          console.error("Error parsing stored demo user:", error)
+          localStorage.removeItem("demo_user")
+        }
+      }
+
+      // Listen for demo auth changes
+      const handleDemoAuth = (event: any) => {
+        const { user: demoUser, event: authEvent } = event.detail
+
+        if (authEvent === "SIGNED_IN" && demoUser) {
+          setUser({
+            id: demoUser.id,
+            name: demoUser.user_metadata?.name || demoUser.email.split("@")[0],
+            email: demoUser.email,
+            avatar: demoUser.user_metadata?.name?.charAt(0) || demoUser.email.charAt(0).toUpperCase(),
+          })
+        } else if (authEvent === "SIGNED_OUT") {
+          setUser(null)
+          localStorage.removeItem("demo_user")
+        }
+      }
+
+      window.addEventListener("demo_auth_change", handleDemoAuth)
+      setLoading(false)
+
+      return () => {
+        window.removeEventListener("demo_auth_change", handleDemoAuth)
+      }
+    }
+
+    // Real Supabase authentication
+    const initializeAuth = async () => {
       try {
         const {
           data: { session },
@@ -56,96 +90,94 @@ export default function Home() {
         }
 
         if (session?.user) {
-          const userData: User = {
+          setUser({
             id: session.user.id,
-            name:
-              session.user.user_metadata?.full_name ||
-              session.user.email
-                ?.split("@")[0]
-                ?.replace(/[._]/g, " ")
-                ?.replace(/\b\w/g, (l: string) => l.toUpperCase()) ||
-              "User",
+            name: session.user.user_metadata?.name || session.user.email?.split("@")[0] || "User",
             email: session.user.email || "",
-            avatar: (session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "U")
-              .charAt(0)
-              .toUpperCase(),
-          }
-          setUser(userData)
+            avatar: session.user.user_metadata?.name?.charAt(0) || session.user.email?.charAt(0).toUpperCase() || "U",
+          })
         }
       } catch (error) {
-        console.error("Error checking session:", error)
+        console.error("Auth initialization error:", error)
       } finally {
         setLoading(false)
       }
     }
 
-    checkSession()
+    initializeAuth()
 
     // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("Auth state changed:", event, session?.user?.email)
+
       if (event === "SIGNED_IN" && session?.user) {
-        const userData: User = {
+        setUser({
           id: session.user.id,
-          name:
-            session.user.user_metadata?.full_name ||
-            session.user.email
-              ?.split("@")[0]
-              ?.replace(/[._]/g, " ")
-              ?.replace(/\b\w/g, (l: string) => l.toUpperCase()) ||
-            "User",
+          name: session.user.user_metadata?.name || session.user.email?.split("@")[0] || "User",
           email: session.user.email || "",
-          avatar: (session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "U")
-            .charAt(0)
-            .toUpperCase(),
-        }
-        setUser(userData)
+          avatar: session.user.user_metadata?.name?.charAt(0) || session.user.email?.charAt(0).toUpperCase() || "U",
+        })
       } else if (event === "SIGNED_OUT") {
         setUser(null)
         setSelectedCommunity(null)
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [])
 
-  const handleLogin = (userData: User) => {
-    setUser(userData)
-  }
-
   const handleLogout = async () => {
-    await supabase.auth.signOut()
-    setUser(null)
-    setSelectedCommunity(null)
-  }
+    try {
+      if (isDemoMode() || !supabase) {
+        // Demo mode logout
+        setUser(null)
+        setSelectedCommunity(null)
+        localStorage.removeItem("demo_user")
+        window.dispatchEvent(
+          new CustomEvent("demo_auth_change", {
+            detail: { user: null, event: "SIGNED_OUT" },
+          }),
+        )
+        return
+      }
 
-  const handleCommunitySelect = (community: Community) => {
-    setSelectedCommunity(community)
-  }
-
-  const handleBackToCommunities = () => {
-    setSelectedCommunity(null)
+      // Real logout
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+    } catch (error) {
+      console.error("Logout error:", error)
+      // Force logout even if there's an error
+      setUser(null)
+      setSelectedCommunity(null)
+    }
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-ucsd-gold border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-300">Loading...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-ucsd-navy to-ucsd-blue">
+        <div className="text-white text-xl">Loading...</div>
       </div>
     )
   }
 
   if (!user) {
-    return <LoginPage onLogin={handleLogin} />
+    return <LoginPage />
   }
 
   if (selectedCommunity) {
-    return <CommunityPage community={selectedCommunity} currentUser={user} onBack={handleBackToCommunities} />
+    return (
+      <CommunityPage
+        community={selectedCommunity}
+        user={user}
+        onBack={() => setSelectedCommunity(null)}
+        onLogout={handleLogout}
+      />
+    )
   }
 
-  return <CommunitiesPage user={user} onCommunitySelect={handleCommunitySelect} onLogout={handleLogout} />
+  return <CommunitiesPage user={user} onCommunitySelect={setSelectedCommunity} onLogout={handleLogout} />
 }

@@ -1,8 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { supabase, getCurrentUser } from "@/lib/supabase"
-import { handleError } from "@/lib/error-handler"
+import { supabase } from "@/lib/supabase"
 import LoginPage from "@/components/login-page"
 import CommunitiesPage from "@/components/communities-page"
 import CommunityPage from "@/components/community-page"
@@ -68,7 +67,19 @@ export default function App() {
 
   const checkUser = async () => {
     try {
-      const user = await getCurrentUser()
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser()
+
+      if (error) {
+        console.log("Auth error:", error.message)
+        // Don't throw error for missing session, just set no user
+        setCurrentUser(null)
+        setCurrentView("login")
+        return
+      }
+
       if (user) {
         const userData: User = {
           id: user.id,
@@ -78,9 +89,15 @@ export default function App() {
         }
         setCurrentUser(userData)
         setCurrentView("communities")
+      } else {
+        setCurrentUser(null)
+        setCurrentView("login")
       }
     } catch (error) {
-      handleError(error, "Failed to check authentication status")
+      console.log("Error checking user:", error)
+      // Don't show error toast for missing auth session
+      setCurrentUser(null)
+      setCurrentView("login")
     } finally {
       setLoading(false)
     }
@@ -105,7 +122,7 @@ export default function App() {
     try {
       await supabase.auth.signOut()
     } catch (error) {
-      handleError(error, "Failed to log out")
+      console.log("Failed to log out:", error)
     }
   }
 

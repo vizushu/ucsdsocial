@@ -25,37 +25,17 @@ ALTER TABLE channel_categories ENABLE ROW LEVEL SECURITY;
 -- RLS policies for channel_categories
 CREATE POLICY "Users can view channel categories in communities they're members of" ON channel_categories
   FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM community_members 
-      WHERE community_members.community_id = channel_categories.community_id 
-      AND community_members.user_id = auth.uid()
+    community_id IN (
+      SELECT community_id FROM community_members 
+      WHERE user_id = auth.uid()
     )
   );
 
-CREATE POLICY "Community members can create channel categories" ON channel_categories
-  FOR INSERT WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM community_members 
-      WHERE community_members.community_id = channel_categories.community_id 
-      AND community_members.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Community members can update channel categories" ON channel_categories
-  FOR UPDATE USING (
-    EXISTS (
-      SELECT 1 FROM community_members 
-      WHERE community_members.community_id = channel_categories.community_id 
-      AND community_members.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Community members can delete channel categories" ON channel_categories
-  FOR DELETE USING (
-    EXISTS (
-      SELECT 1 FROM community_members 
-      WHERE community_members.community_id = channel_categories.community_id 
-      AND community_members.user_id = auth.uid()
+CREATE POLICY "Community admins can manage channel categories" ON channel_categories
+  FOR ALL USING (
+    community_id IN (
+      SELECT community_id FROM community_members 
+      WHERE user_id = auth.uid() AND role IN ('admin', 'owner')
     )
   );
 
@@ -81,29 +61,3 @@ SET category_id = (
   LIMIT 1
 )
 WHERE category_id IS NULL;
-
--- Add some additional categories for trip planning communities
-INSERT INTO channel_categories (name, community_id, position, created_by)
-SELECT 
-  'Trip Planning' as name,
-  c.id as community_id,
-  1 as position,
-  c.created_by as created_by
-FROM communities c
-WHERE (c.name ILIKE '%trip%' OR c.name ILIKE '%yosemite%')
-AND NOT EXISTS (
-  SELECT 1 FROM channel_categories cc 
-  WHERE cc.community_id = c.id AND cc.name = 'Trip Planning'
-);
-
-INSERT INTO channel_categories (name, community_id, position, created_by)
-SELECT 
-  'Voice Channels' as name,
-  c.id as community_id,
-  2 as position,
-  c.created_by as created_by
-FROM communities c
-WHERE NOT EXISTS (
-  SELECT 1 FROM channel_categories cc 
-  WHERE cc.community_id = c.id AND cc.name = 'Voice Channels'
-);

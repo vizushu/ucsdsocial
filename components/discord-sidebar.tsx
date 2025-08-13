@@ -3,38 +3,56 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Badge } from "@/components/ui/badge"
-import { supabase, isDemoMode, demoData } from "@/lib/supabase"
-import { Hash, Volume2, ChevronDown, ChevronRight, Settings, LogOut, Plus } from "lucide-react"
+import {
+  Hash,
+  Volume2,
+  Settings,
+  UserPlus,
+  ChevronDown,
+  ChevronRight,
+  Plus,
+  Mic,
+  Headphones,
+  LogOut,
+} from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
-import type { User, Community } from "@/app/page"
+import { supabase, isDemoMode } from "@/lib/supabase"
 
 interface Channel {
   id: string
   name: string
   type: string
-  community_id: string
-  category_id?: string | null
-  topic?: string | null
+  category_id?: string
+  topic?: string
   position: number
-  created_at: string
-  created_by: string
 }
 
-interface ChannelCategory {
+interface Category {
   id: string
   name: string
-  community_id: string
   position: number
-  created_at: string
-  created_by: string
+  channels: Channel[]
+}
+
+interface Community {
+  id: string
+  name: string
+  description: string
+  member_count: number
+}
+
+interface User {
+  id: string
+  name: string
+  email: string
+  avatar: string
 }
 
 interface DiscordSidebarProps {
   community: Community
   user: User
-  selectedChannelId: string | null
-  onChannelSelect: (channelId: string, channelName: string) => void
+  selectedChannel: Channel | null
+  onChannelSelect: (channel: Channel) => void
   onBack: () => void
   onLogout: () => void
 }
@@ -42,13 +60,12 @@ interface DiscordSidebarProps {
 export default function DiscordSidebar({
   community,
   user,
-  selectedChannelId,
+  selectedChannel,
   onChannelSelect,
   onBack,
   onLogout,
 }: DiscordSidebarProps) {
-  const [channels, setChannels] = useState<Channel[]>([])
-  const [categories, setCategories] = useState<ChannelCategory[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
 
@@ -59,91 +76,175 @@ export default function DiscordSidebar({
   const loadChannelsAndCategories = async () => {
     try {
       if (isDemoMode() || !supabase) {
-        // Load demo data
-        const communityChannels = demoData.channels.filter((c) => c.community_id === community.id)
-        const communityCategories = demoData.categories.filter((c) => c.community_id === community.id)
-
-        setChannels(communityChannels)
-        setCategories(communityCategories)
+        // Use demo data
+        const demoCategories: Category[] = [
+          {
+            id: "demo-general-cat",
+            name: "GENERAL",
+            position: 0,
+            channels: [
+              {
+                id: "demo-general",
+                name: "general",
+                type: "text",
+                category_id: "demo-general-cat",
+                topic: "General discussion about the trip",
+                position: 0,
+              },
+              {
+                id: "demo-announcements",
+                name: "announcements",
+                type: "text",
+                category_id: "demo-general-cat",
+                topic: "Important updates and announcements",
+                position: 1,
+              },
+            ],
+          },
+          {
+            id: "demo-planning-cat",
+            name: "TRIP PLANNING",
+            position: 1,
+            channels: [
+              {
+                id: "demo-itinerary",
+                name: "itinerary",
+                type: "text",
+                category_id: "demo-planning-cat",
+                topic: "Plan our daily activities",
+                position: 0,
+              },
+              {
+                id: "demo-checklist",
+                name: "packing-checklist",
+                type: "text",
+                category_id: "demo-planning-cat",
+                topic: "What to bring on the trip",
+                position: 1,
+              },
+              {
+                id: "demo-food",
+                name: "food-planning",
+                type: "text",
+                category_id: "demo-planning-cat",
+                topic: "Meal planning and dietary needs",
+                position: 2,
+              },
+            ],
+          },
+          {
+            id: "demo-voice-cat",
+            name: "VOICE CHANNELS",
+            position: 2,
+            channels: [
+              {
+                id: "demo-voice-general",
+                name: "General",
+                type: "voice",
+                category_id: "demo-voice-cat",
+                position: 0,
+              },
+              {
+                id: "demo-voice-planning",
+                name: "Planning Session",
+                type: "voice",
+                category_id: "demo-voice-cat",
+                position: 1,
+              },
+            ],
+          },
+        ]
+        setCategories(demoCategories)
         setLoading(false)
         return
       }
 
       // Load real data from Supabase
-      const [channelsResponse, categoriesResponse] = await Promise.all([
-        supabase.from("channels").select("*").eq("community_id", community.id).order("position", { ascending: true }),
+      const [categoriesResult, channelsResult] = await Promise.all([
         supabase
           .from("channel_categories")
           .select("*")
           .eq("community_id", community.id)
           .order("position", { ascending: true }),
+        supabase.from("channels").select("*").eq("community_id", community.id).order("position", { ascending: true }),
       ])
 
-      if (channelsResponse.error) {
-        console.error("Error loading channels:", channelsResponse.error)
-      } else {
-        setChannels(channelsResponse.data || [])
+      if (categoriesResult.error) throw categoriesResult.error
+      if (channelsResult.error) throw channelsResult.error
+
+      // Group channels by category
+      const categoriesWithChannels: Category[] = (categoriesResult.data || []).map((category) => ({
+        ...category,
+        channels: (channelsResult.data || []).filter((channel) => channel.category_id === category.id),
+      }))
+
+      // Add uncategorized channels
+      const uncategorizedChannels = (channelsResult.data || []).filter((channel) => !channel.category_id)
+      if (uncategorizedChannels.length > 0) {
+        categoriesWithChannels.unshift({
+          id: "uncategorized",
+          name: "CHANNELS",
+          position: -1,
+          channels: uncategorizedChannels,
+        })
       }
 
-      if (categoriesResponse.error) {
-        console.error("Error loading categories:", categoriesResponse.error)
-      } else {
-        setCategories(categoriesResponse.data || [])
-      }
+      setCategories(categoriesWithChannels)
     } catch (error) {
-      console.error("Error in loadChannelsAndCategories:", error)
-      // Fallback to demo data
-      const communityChannels = demoData.channels.filter((c) => c.community_id === community.id)
-      const communityCategories = demoData.categories.filter((c) => c.community_id === community.id)
-
-      setChannels(communityChannels)
-      setCategories(communityCategories)
+      console.error("Error loading channels:", error)
+      // Fallback to demo data on error
+      const demoCategories: Category[] = [
+        {
+          id: "demo-general-cat",
+          name: "GENERAL",
+          position: 0,
+          channels: [
+            {
+              id: "demo-general",
+              name: "general",
+              type: "text",
+              category_id: "demo-general-cat",
+              topic: "General discussion",
+              position: 0,
+            },
+          ],
+        },
+      ]
+      setCategories(demoCategories)
     } finally {
       setLoading(false)
     }
   }
 
   const toggleCategory = (categoryId: string) => {
-    const newCollapsed = new Set(collapsedCategories)
-    if (newCollapsed.has(categoryId)) {
-      newCollapsed.delete(categoryId)
-    } else {
-      newCollapsed.add(categoryId)
-    }
-    setCollapsedCategories(newCollapsed)
+    setCollapsedCategories((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(categoryId)) {
+        newSet.delete(categoryId)
+      } else {
+        newSet.add(categoryId)
+      }
+      return newSet
+    })
   }
 
-  const getChannelIcon = (type: string) => {
-    switch (type) {
+  const getChannelIcon = (channel: Channel) => {
+    switch (channel.type) {
       case "voice":
         return <Volume2 className="h-4 w-4" />
+      case "text":
       default:
         return <Hash className="h-4 w-4" />
     }
   }
 
-  const renderChannelsForCategory = (categoryId: string | null) => {
-    const categoryChannels = channels.filter((c) => c.category_id === categoryId)
-
-    return categoryChannels.map((channel) => (
-      <Button
-        key={channel.id}
-        variant={selectedChannelId === channel.id ? "secondary" : "ghost"}
-        className="w-full justify-start text-left h-8 px-2 text-sm font-normal"
-        onClick={() => onChannelSelect(channel.id, channel.name)}
-      >
-        <div className="flex items-center space-x-2 min-w-0">
-          {getChannelIcon(channel.type)}
-          <span className="truncate">{channel.name}</span>
-        </div>
-      </Button>
-    ))
-  }
-
   if (loading) {
     return (
-      <div className="w-60 bg-gray-800 text-white p-4">
-        <div className="text-center">Loading...</div>
+      <div className="w-60 bg-gray-800 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+          <p className="text-sm">Loading...</p>
+        </div>
       </div>
     )
   }
@@ -151,82 +252,101 @@ export default function DiscordSidebar({
   return (
     <div className="w-60 bg-gray-800 text-white flex flex-col h-full">
       {/* Server Header */}
-      <div className="p-4 border-b border-gray-700">
+      <div className="p-4 border-b border-gray-700 shadow-md">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold truncate">{community.name}</h2>
-          <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white h-6 w-6 p-0" onClick={onBack}>
-            ×
-          </Button>
+          <div className="flex-1 min-w-0">
+            <h1 className="font-bold text-white truncate">{community.name}</h1>
+            <p className="text-xs text-gray-400">{community.member_count} members</p>
+          </div>
+          <div className="flex items-center space-x-1">
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-gray-400 hover:text-white">
+              <UserPlus className="h-3 w-3" />
+            </Button>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-gray-400 hover:text-white">
+              <Settings className="h-3 w-3" />
+            </Button>
+          </div>
         </div>
-        {isDemoMode() && (
-          <Badge variant="secondary" className="text-xs mt-1">
-            Demo Mode
-          </Badge>
-        )}
       </div>
 
       {/* Channels */}
-      <ScrollArea className="flex-1 px-2">
-        <div className="py-2 space-y-1">
-          {/* Categorized Channels */}
-          {categories.map((category) => {
-            const isCollapsed = collapsedCategories.has(category.id)
-            const categoryChannels = channels.filter((c) => c.category_id === category.id)
+      <ScrollArea className="flex-1">
+        <div className="p-2">
+          {categories.map((category) => (
+            <div key={category.id} className="mb-4">
+              {/* Category Header */}
+              <button
+                onClick={() => toggleCategory(category.id)}
+                className="flex items-center justify-between w-full px-2 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wide hover:text-gray-300 transition-colors"
+              >
+                <span>{category.name}</span>
+                {collapsedCategories.has(category.id) ? (
+                  <ChevronRight className="h-3 w-3" />
+                ) : (
+                  <ChevronDown className="h-3 w-3" />
+                )}
+              </button>
 
-            if (categoryChannels.length === 0) return null
-
-            return (
-              <div key={category.id}>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start text-left h-6 px-1 text-xs font-semibold text-gray-400 hover:text-gray-300 uppercase tracking-wide"
-                  onClick={() => toggleCategory(category.id)}
-                >
-                  <div className="flex items-center space-x-1">
-                    {isCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                    <span>{category.name}</span>
-                  </div>
-                </Button>
-
-                {!isCollapsed && <div className="ml-2 space-y-0.5">{renderChannelsForCategory(category.id)}</div>}
-              </div>
-            )
-          })}
-
-          {/* Uncategorized Channels */}
-          {channels.filter((c) => !c.category_id).length > 0 && (
-            <div className="space-y-0.5">{renderChannelsForCategory(null)}</div>
-          )}
-
-          {/* Add Channel Button */}
-          <Button
-            variant="ghost"
-            className="w-full justify-start text-left h-8 px-2 text-sm text-gray-400 hover:text-gray-300"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Channel
-          </Button>
+              {/* Channels in Category */}
+              {!collapsedCategories.has(category.id) && (
+                <div className="mt-1 space-y-0.5">
+                  {category.channels.map((channel) => (
+                    <button
+                      key={channel.id}
+                      onClick={() => onChannelSelect(channel)}
+                      className={`flex items-center w-full px-2 py-1.5 rounded text-sm transition-colors group ${
+                        selectedChannel?.id === channel.id
+                          ? "bg-gray-600 text-white"
+                          : "text-gray-300 hover:bg-gray-700 hover:text-gray-100"
+                      }`}
+                    >
+                      <span className="mr-2 text-gray-400">{getChannelIcon(channel)}</span>
+                      <span className="truncate">{channel.name}</span>
+                      {channel.type === "voice" && (
+                        <div className="ml-auto flex items-center space-x-1">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          <span className="text-xs text-gray-400">3</span>
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                  <button className="flex items-center w-full px-2 py-1.5 rounded text-sm text-gray-400 hover:text-gray-300 transition-colors opacity-0 group-hover:opacity-100">
+                    <Plus className="h-4 w-4 mr-2" />
+                    <span className="text-xs">Add Channel</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </ScrollArea>
 
       {/* User Panel */}
-      <div className="p-2 border-t border-gray-700 bg-gray-900">
+      <div className="p-3 bg-gray-900 border-t border-gray-700">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2 min-w-0">
-            <div className="w-8 h-8 bg-ucsd-gold rounded-full flex items-center justify-center text-ucsd-navy font-semibold text-sm">
+          <div className="flex items-center space-x-2 flex-1 min-w-0">
+            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold text-xs">
               {user.avatar}
             </div>
-            <div className="min-w-0">
-              <div className="text-sm font-medium truncate">{user.name}</div>
-              <div className="text-xs text-gray-400 truncate">{user.email}</div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-white truncate">{user.name}</p>
+              <p className="text-xs text-gray-400 truncate">#{user.id.slice(-4)}</p>
             </div>
           </div>
           <div className="flex items-center space-x-1">
-            <ThemeToggle />
-            <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white h-6 w-6 p-0">
-              <Settings className="h-3 w-3" />
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-gray-400 hover:text-white">
+              <Mic className="h-3 w-3" />
             </Button>
-            <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white h-6 w-6 p-0" onClick={onLogout}>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-gray-400 hover:text-white">
+              <Headphones className="h-3 w-3" />
+            </Button>
+            <ThemeToggle />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 text-gray-400 hover:text-red-400"
+              onClick={onLogout}
+            >
               <LogOut className="h-3 w-3" />
             </Button>
           </div>

@@ -1,15 +1,29 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabase"
-import { Button } from "@/components/ui/button"
-import { Hash, Menu } from "lucide-react"
+import { supabase, isSupabaseConfigured, type Channel } from "@/lib/supabase"
+import DiscordSidebar from "@/components/discord-sidebar"
 import EnhancedChatChannel from "@/components/enhanced-chat-channel"
 import ItineraryChannel from "@/components/itinerary-channel"
 import ChecklistChannel from "@/components/checklist-channel"
-import DiscordSidebar from "@/components/discord-sidebar"
-import { ThemeToggle } from "@/components/theme-toggle"
-import type { User, Community, Channel } from "@/app/page"
+import FoodPlanningChannel from "@/components/food-planning-channel"
+import FoodDietaryChannel from "@/components/food-dietary-channel"
+import { toast } from "sonner"
+
+interface User {
+  id: string
+  name: string
+  email: string
+  avatar: string
+}
+
+interface Community {
+  id: string
+  name: string
+  description: string
+  icon: string
+  member_count: number
+}
 
 interface CommunityPageProps {
   user: User
@@ -19,150 +33,107 @@ interface CommunityPageProps {
 }
 
 export default function CommunityPage({ user, community, onBack, onLogout }: CommunityPageProps) {
-  const [channels, setChannels] = useState<Channel[]>([])
-  const [activeChannel, setActiveChannel] = useState<string>("")
-  const [activeChannelName, setActiveChannelName] = useState<string>("")
-  const [activeChannelTopic, setActiveChannelTopic] = useState<string>("")
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadChannels()
+    // Auto-select first channel
+    loadInitialChannel()
   }, [community.id])
 
-  const loadChannels = async () => {
+  const loadInitialChannel = async () => {
     try {
+      if (!isSupabaseConfigured()) {
+        // Demo mode - select general channel
+        const demoChannel: Channel = {
+          id: "general-chat",
+          name: "general",
+          type: "text",
+          community_id: community.id,
+          category_id: "general-cat",
+          topic: "General discussion about the trip",
+          position: 0,
+          created_at: new Date().toISOString(),
+        }
+        setSelectedChannel(demoChannel)
+        setLoading(false)
+        return
+      }
+
       const { data, error } = await supabase
         .from("channels")
         .select("*")
         .eq("community_id", community.id)
-        .order("created_at", { ascending: true })
+        .order("position")
+        .limit(1)
 
       if (error) throw error
 
-      setChannels(data || [])
       if (data && data.length > 0) {
-        const firstChannel = data[0]
-        setActiveChannel(firstChannel.id)
-        setActiveChannelName(firstChannel.name)
-        setActiveChannelTopic(firstChannel.topic || "")
+        setSelectedChannel(data[0])
       }
     } catch (error) {
-      console.error("Error loading channels:", error)
+      console.error("Error loading initial channel:", error)
+      toast.error("Failed to load channels")
     } finally {
       setLoading(false)
     }
   }
 
-  const handleChannelSelect = (channelId: string, channelName: string, channelTopic?: string) => {
-    setActiveChannel(channelId)
-    setActiveChannelName(channelName)
-    setActiveChannelTopic(channelTopic || "")
-    setSidebarOpen(false) // Close mobile sidebar
+  const handleChannelSelect = (channel: Channel) => {
+    setSelectedChannel(channel)
   }
 
   const renderChannelContent = () => {
-    const channel = channels.find((c) => c.id === activeChannel)
-    if (!channel) return null
+    if (!selectedChannel) {
+      return (
+        <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+          <div className="text-center">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Welcome to {community.name}</h3>
+            <p className="text-gray-500 dark:text-gray-400">Select a channel from the sidebar to start chatting</p>
+          </div>
+        </div>
+      )
+    }
 
-    switch (channel.name) {
-      case "chat":
-      case "general":
-      case "random":
-        return (
-          <EnhancedChatChannel
-            user={user}
-            channelId={channel.id}
-            channelName={channel.name}
-            channelTopic={channel.topic}
-            communityId={community.id}
-          />
-        )
+    // Special channel types
+    switch (selectedChannel.name) {
       case "itinerary":
-        return <ItineraryChannel user={user} channelId={channel.id} communityId={community.id} />
-      case "gear-checklist":
-        return <ChecklistChannel user={user} channelId={channel.id} communityId={community.id} />
+        return <ItineraryChannel user={user} channel={selectedChannel} />
+      case "checklist":
+        return <ChecklistChannel user={user} channel={selectedChannel} />
+      case "food-planning":
+        return <FoodPlanningChannel user={user} channel={selectedChannel} />
+      case "food-dietary":
+        return <FoodDietaryChannel user={user} channel={selectedChannel} />
       default:
-        return (
-          <EnhancedChatChannel
-            user={user}
-            channelId={channel.id}
-            channelName={channel.name}
-            channelTopic={channel.topic}
-            communityId={community.id}
-          />
-        )
+        // Regular chat channel
+        return <EnhancedChatChannel user={user} channel={selectedChannel} />
     }
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+      <div className="h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-ucsd-gold border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-300">Loading community...</p>
+          <p className="text-gray-600 dark:text-gray-300">Loading community...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-700 flex">
-      {/* Desktop Sidebar */}
-      <div className="hidden lg:block">
-        <DiscordSidebar
-          user={user}
-          community={community}
-          activeChannelId={activeChannel}
-          onChannelSelect={handleChannelSelect}
-          onBack={onBack}
-        />
-      </div>
-
-      {/* Mobile Sidebar */}
-      <div
-        className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out lg:hidden`}
-      >
-        <DiscordSidebar
-          user={user}
-          community={community}
-          activeChannelId={activeChannel}
-          onChannelSelect={handleChannelSelect}
-          onBack={onBack}
-        />
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile Header */}
-        <div className="lg:hidden bg-gray-800 border-b border-gray-700 p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSidebarOpen(true)}
-                className="text-gray-400 hover:text-white"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              <div className="flex items-center space-x-2">
-                <Hash className="h-4 w-4 text-gray-400" />
-                <h1 className="font-semibold text-white">{activeChannelName}</h1>
-              </div>
-            </div>
-            <ThemeToggle />
-          </div>
-        </div>
-
-        {/* Channel Content */}
-        <div className="flex-1 overflow-hidden">{renderChannelContent()}</div>
-      </div>
-
-      {/* Mobile Sidebar Overlay */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
-      )}
+    <div className="h-screen flex bg-gray-100 dark:bg-gray-900">
+      <DiscordSidebar
+        user={user}
+        community={community}
+        selectedChannel={selectedChannel}
+        onChannelSelect={handleChannelSelect}
+        onBack={onBack}
+        onLogout={onLogout}
+      />
+      <div className="flex-1 flex flex-col">{renderChannelContent()}</div>
     </div>
   )
 }

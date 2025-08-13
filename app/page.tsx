@@ -1,11 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabase"
 import LoginPage from "@/components/login-page"
 import CommunitiesPage from "@/components/communities-page"
 import CommunityPage from "@/components/community-page"
 import { Toaster } from "sonner"
+import { isSupabaseConfigured } from "@/lib/supabase"
 
 export type User = {
   id: string
@@ -37,60 +37,45 @@ export default function App() {
   const [currentView, setCurrentView] = useState<"login" | "communities" | "community">("login")
   const [selectedCommunity, setSelectedCommunity] = useState<Community | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isDemo, setIsDemo] = useState(false)
 
   useEffect(() => {
-    checkUser()
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "SIGNED_IN" && session?.user) {
-        const user: User = {
-          id: session.user.id,
-          name: session.user.user_metadata?.name || session.user.email?.split("@")[0] || "User",
-          email: session.user.email || "",
-          avatar: session.user.user_metadata?.name?.charAt(0).toUpperCase() || "U",
-        }
-        setCurrentUser(user)
-        setCurrentView("communities")
-      } else if (event === "SIGNED_OUT") {
-        setCurrentUser(null)
-        setSelectedCommunity(null)
-        setCurrentView("login")
-      }
-      setLoading(false)
-    })
-
-    return () => subscription.unsubscribe()
+    initializeApp()
   }, [])
 
-  const checkUser = async () => {
+  const initializeApp = async () => {
     try {
-      // Check if Supabase is configured first
-      const { isSupabaseConfigured } = await import("@/lib/supabase")
+      console.log("🚀 Initializing app...")
 
-      if (!isSupabaseConfigured()) {
-        console.log("Supabase not configured, staying on login page for demo mode")
+      // Check if Supabase is configured
+      const configured = isSupabaseConfigured()
+      setIsDemo(!configured)
+
+      if (!configured) {
+        console.log("🎭 Running in demo mode")
         setCurrentUser(null)
         setCurrentView("login")
+        setLoading(false)
         return
       }
 
+      console.log("🔗 Supabase configured, checking authentication...")
+
+      // Dynamic import to avoid loading if not configured
       const { supabase } = await import("@/lib/supabase")
+
+      // Check current user
       const {
         data: { user },
         error,
       } = await supabase.auth.getUser()
 
       if (error) {
-        console.log("Auth error:", error.message)
+        console.log("⚠️ Auth check error:", error.message)
         setCurrentUser(null)
         setCurrentView("login")
-        return
-      }
-
-      if (user) {
+      } else if (user) {
+        console.log("✅ User authenticated:", user.email)
         const userData: User = {
           id: user.id,
           name: user.user_metadata?.name || user.email?.split("@")[0] || "User",
@@ -100,11 +85,38 @@ export default function App() {
         setCurrentUser(userData)
         setCurrentView("communities")
       } else {
+        console.log("ℹ️ No authenticated user")
         setCurrentUser(null)
         setCurrentView("login")
       }
+
+      // Set up auth state listener
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log("🔄 Auth state changed:", event)
+
+        if (event === "SIGNED_IN" && session?.user) {
+          const user: User = {
+            id: session.user.id,
+            name: session.user.user_metadata?.name || session.user.email?.split("@")[0] || "User",
+            email: session.user.email || "",
+            avatar: session.user.user_metadata?.name?.charAt(0).toUpperCase() || "U",
+          }
+          setCurrentUser(user)
+          setCurrentView("communities")
+        } else if (event === "SIGNED_OUT") {
+          setCurrentUser(null)
+          setSelectedCommunity(null)
+          setCurrentView("login")
+        }
+      })
+
+      // Cleanup function
+      return () => subscription.unsubscribe()
     } catch (error) {
-      console.log("Error checking user:", error)
+      console.error("❌ App initialization failed:", error)
+      setIsDemo(true)
       setCurrentUser(null)
       setCurrentView("login")
     } finally {
@@ -113,25 +125,41 @@ export default function App() {
   }
 
   const handleLogin = (user: User) => {
+    console.log("👤 User logged in:", user.email)
     setCurrentUser(user)
     setCurrentView("communities")
   }
 
   const handleSelectCommunity = (community: Community) => {
+    console.log("🏘️ Community selected:", community.name)
     setSelectedCommunity(community)
     setCurrentView("community")
   }
 
   const handleBackToCommunities = () => {
+    console.log("⬅️ Back to communities")
     setSelectedCommunity(null)
     setCurrentView("communities")
   }
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut()
+      console.log("👋 Logging out...")
+
+      if (!isDemo) {
+        const { supabase } = await import("@/lib/supabase")
+        await supabase.auth.signOut()
+      }
+
+      setCurrentUser(null)
+      setSelectedCommunity(null)
+      setCurrentView("login")
     } catch (error) {
-      console.log("Failed to log out:", error)
+      console.error("❌ Logout failed:", error)
+      // Force logout anyway
+      setCurrentUser(null)
+      setSelectedCommunity(null)
+      setCurrentView("login")
     }
   }
 

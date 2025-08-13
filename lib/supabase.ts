@@ -1,64 +1,104 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 
-// Check if environment variables are available
+// Environment variable checking with better validation
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-console.log("Supabase config check:", {
+console.log("🔍 Supabase Environment Check:", {
   hasUrl: !!supabaseUrl,
   hasKey: !!supabaseAnonKey,
-  urlPreview: supabaseUrl ? supabaseUrl.substring(0, 30) + "..." : "undefined",
+  urlValid: supabaseUrl ? supabaseUrl.startsWith("https://") && supabaseUrl.includes(".supabase.co") : false,
+  keyValid: supabaseAnonKey ? supabaseAnonKey.length > 100 : false,
 })
 
-// Check if Supabase is properly configured
-export const isSupabaseConfigured = () => {
-  const configured = !!(supabaseUrl && supabaseAnonKey)
-  console.log("isSupabaseConfigured:", configured)
-  return configured
+// Robust configuration check
+export const isSupabaseConfigured = (): boolean => {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.log("❌ Missing Supabase environment variables")
+    return false
+  }
+
+  if (!supabaseUrl.startsWith("https://") || !supabaseUrl.includes(".supabase.co")) {
+    console.log("❌ Invalid Supabase URL format")
+    return false
+  }
+
+  if (supabaseAnonKey.length < 100) {
+    console.log("❌ Invalid Supabase key format")
+    return false
+  }
+
+  console.log("✅ Supabase is properly configured")
+  return true
 }
 
-// Create a dummy client for when Supabase is not configured
-const createDummyClient = () => ({
-  auth: {
-    signInWithPassword: () => Promise.reject(new Error("Supabase not configured - using demo mode")),
-    signInWithOAuth: () => Promise.reject(new Error("Supabase not configured - using demo mode")),
-    signUp: () => Promise.reject(new Error("Supabase not configured - using demo mode")),
-    signOut: () => Promise.resolve({ error: null }),
-    getUser: () => Promise.resolve({ data: { user: null }, error: null }),
-    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-  },
-  from: () => ({
-    select: () => Promise.reject(new Error("Database not configured - using demo mode")),
-    insert: () => Promise.reject(new Error("Database not configured - using demo mode")),
-    update: () => Promise.reject(new Error("Database not configured - using demo mode")),
-    delete: () => Promise.reject(new Error("Database not configured - using demo mode")),
-  }),
-  channel: () => ({
-    on: () => ({ subscribe: () => {} }),
-  }),
-})
+// Create a comprehensive dummy client for demo mode
+const createDummyClient = () => {
+  console.log("🎭 Creating dummy Supabase client for demo mode")
 
-// Create the actual Supabase client or dummy client
+  return {
+    auth: {
+      signInWithPassword: () => Promise.reject(new Error("Demo mode: Use any @ucsd.edu email")),
+      signInWithOAuth: () => Promise.reject(new Error("Demo mode: Social login not available")),
+      signUp: () => Promise.reject(new Error("Demo mode: Use any @ucsd.edu email")),
+      signOut: () => Promise.resolve({ error: null }),
+      getUser: () => Promise.resolve({ data: { user: null }, error: null }),
+      onAuthStateChange: () => ({
+        data: {
+          subscription: {
+            unsubscribe: () => console.log("🎭 Demo auth subscription unsubscribed"),
+          },
+        },
+      }),
+    },
+    from: (table: string) => ({
+      select: () => Promise.reject(new Error(`Demo mode: Cannot query ${table} table`)),
+      insert: () => Promise.reject(new Error(`Demo mode: Cannot insert into ${table} table`)),
+      update: () => Promise.reject(new Error(`Demo mode: Cannot update ${table} table`)),
+      delete: () => Promise.reject(new Error(`Demo mode: Cannot delete from ${table} table`)),
+      upsert: () => Promise.reject(new Error(`Demo mode: Cannot upsert ${table} table`)),
+    }),
+    channel: (name: string) => ({
+      on: () => ({
+        subscribe: () => {
+          console.log(`🎭 Demo channel subscription: ${name}`)
+          return { unsubscribe: () => {} }
+        },
+      }),
+    }),
+  }
+}
+
+// Singleton pattern for client creation
 let _supabaseClient: SupabaseClient | any = null
 
 const getSupabaseClient = () => {
-  if (_supabaseClient) return _supabaseClient
+  if (_supabaseClient) {
+    return _supabaseClient
+  }
 
   if (!isSupabaseConfigured()) {
-    console.warn("Supabase not configured - creating dummy client for demo mode")
+    console.warn("⚠️ Supabase not configured - using demo client")
     _supabaseClient = createDummyClient()
     return _supabaseClient
   }
 
-  console.log("Creating real Supabase client")
-  _supabaseClient = createClient(supabaseUrl!, supabaseAnonKey!)
-  return _supabaseClient
+  try {
+    console.log("🚀 Creating real Supabase client")
+    _supabaseClient = createClient(supabaseUrl!, supabaseAnonKey!)
+    return _supabaseClient
+  } catch (error) {
+    console.error("❌ Failed to create Supabase client:", error)
+    console.warn("🎭 Falling back to demo client")
+    _supabaseClient = createDummyClient()
+    return _supabaseClient
+  }
 }
 
 // Export the client
 export const supabase = getSupabaseClient()
 
-// Rest of the file remains the same...
+// Type definitions
 export interface Community {
   id: string
   name: string
@@ -126,86 +166,42 @@ export interface FoodItem {
   created_by: string
 }
 
-// Utility functions with better error handling
+// Utility functions with comprehensive error handling
 export const getCurrentUser = async () => {
-  try {
-    if (!isSupabaseConfigured()) {
-      console.log("Supabase not configured - no user available")
-      return null
-    }
+  if (!isSupabaseConfigured()) {
+    console.log("🎭 Demo mode: No user authentication")
+    return null
+  }
 
+  try {
     const {
       data: { user },
       error,
     } = await supabase.auth.getUser()
 
     if (error) {
-      console.log("getCurrentUser error:", error.message)
+      console.log("⚠️ Auth error:", error.message)
       return null
     }
+
     return user
   } catch (error) {
-    console.log("Error getting current user:", error)
+    console.error("❌ Error getting current user:", error)
     return null
-  }
-}
-
-export const getCommunityMembers = async (communityId: string) => {
-  if (!isSupabaseConfigured()) {
-    throw new Error("Database not configured - using demo mode")
-  }
-
-  try {
-    const { data, error } = await supabase.from("community_members").select("*").eq("community_id", communityId)
-
-    if (error) {
-      console.error("getCommunityMembers error:", error)
-      throw error
-    }
-    return data || []
-  } catch (error) {
-    console.error("Error getting community members:", error)
-    throw error
-  }
-}
-
-export const getUserCommunities = async (userId: string) => {
-  if (!isSupabaseConfigured()) {
-    throw new Error("Database not configured - using demo mode")
-  }
-
-  try {
-    const { data, error } = await supabase
-      .from("community_members")
-      .select(`
-      *,
-      communities (*)
-    `)
-      .eq("user_id", userId)
-
-    if (error) {
-      console.error("getUserCommunities error:", error)
-      throw error
-    }
-    return data || []
-  } catch (error) {
-    console.error("Error getting user communities:", error)
-    throw error
   }
 }
 
 export const joinCommunity = async (userId: string, communityId: string) => {
   if (!isSupabaseConfigured()) {
-    throw new Error("Database not configured - using demo mode")
+    throw new Error("Demo mode: Database operations not available")
+  }
+
+  if (!userId || !communityId) {
+    throw new Error("User ID and Community ID are required")
   }
 
   try {
-    console.log(`Attempting to join community ${communityId} for user ${userId}`)
-
-    if (!userId || !communityId) {
-      throw new Error("User ID and Community ID are required")
-    }
-
+    // Check if already a member
     const { data: existingMember, error: checkError } = await supabase
       .from("community_members")
       .select("id")
@@ -214,15 +210,15 @@ export const joinCommunity = async (userId: string, communityId: string) => {
       .maybeSingle()
 
     if (checkError) {
-      console.error("Error checking existing membership:", checkError)
-      throw checkError
+      console.error("Error checking membership:", checkError)
+      throw new Error(`Failed to check membership: ${checkError.message}`)
     }
 
     if (existingMember) {
-      console.log("User is already a member")
-      throw new Error("You are already a member of this community")
+      throw new Error("Already a member of this community")
     }
 
+    // Join the community
     const { data, error } = await supabase
       .from("community_members")
       .insert({
@@ -233,11 +229,10 @@ export const joinCommunity = async (userId: string, communityId: string) => {
       .select()
 
     if (error) {
-      console.error("Error inserting membership:", error)
-      throw error
+      console.error("Error joining community:", error)
+      throw new Error(`Failed to join community: ${error.message}`)
     }
 
-    console.log("Successfully joined community:", data)
     return data
   } catch (error) {
     console.error("joinCommunity error:", error)
@@ -247,16 +242,14 @@ export const joinCommunity = async (userId: string, communityId: string) => {
 
 export const leaveCommunity = async (userId: string, communityId: string) => {
   if (!isSupabaseConfigured()) {
-    throw new Error("Database not configured - using demo mode")
+    throw new Error("Demo mode: Database operations not available")
+  }
+
+  if (!userId || !communityId) {
+    throw new Error("User ID and Community ID are required")
   }
 
   try {
-    console.log(`Attempting to leave community ${communityId} for user ${userId}`)
-
-    if (!userId || !communityId) {
-      throw new Error("User ID and Community ID are required")
-    }
-
     const { error } = await supabase
       .from("community_members")
       .delete()
@@ -265,10 +258,8 @@ export const leaveCommunity = async (userId: string, communityId: string) => {
 
     if (error) {
       console.error("Error leaving community:", error)
-      throw error
+      throw new Error(`Failed to leave community: ${error.message}`)
     }
-
-    console.log("Successfully left community")
   } catch (error) {
     console.error("leaveCommunity error:", error)
     throw error
@@ -277,16 +268,14 @@ export const leaveCommunity = async (userId: string, communityId: string) => {
 
 export const toggleStarCommunity = async (userId: string, communityId: string, isStarred: boolean) => {
   if (!isSupabaseConfigured()) {
-    throw new Error("Database not configured - using demo mode")
+    throw new Error("Demo mode: Database operations not available")
+  }
+
+  if (!userId || !communityId) {
+    throw new Error("User ID and Community ID are required")
   }
 
   try {
-    console.log(`Toggling star for community ${communityId} to ${isStarred}`)
-
-    if (!userId || !communityId) {
-      throw new Error("User ID and Community ID are required")
-    }
-
     const { error } = await supabase
       .from("community_members")
       .update({ is_starred: isStarred })
@@ -295,10 +284,8 @@ export const toggleStarCommunity = async (userId: string, communityId: string, i
 
     if (error) {
       console.error("Error toggling star:", error)
-      throw error
+      throw new Error(`Failed to toggle star: ${error.message}`)
     }
-
-    console.log("Successfully toggled star")
   } catch (error) {
     console.error("toggleStarCommunity error:", error)
     throw error
@@ -306,7 +293,7 @@ export const toggleStarCommunity = async (userId: string, communityId: string, i
 }
 
 export const checkDatabaseSetup = async (): Promise<boolean> => {
-  console.log("🔍 Starting database setup check...")
+  console.log("🔍 Checking database setup...")
 
   if (!isSupabaseConfigured()) {
     console.log("❌ Supabase not configured")
@@ -324,30 +311,29 @@ export const checkDatabaseSetup = async (): Promise<boolean> => {
       "food_items",
     ]
 
-    console.log("🔍 Checking table existence...")
     for (const table of tables) {
       try {
-        const { data, error } = await supabase.from(table).select("id").limit(1)
+        const { error } = await supabase.from(table).select("id").limit(1)
 
         if (error) {
-          console.log(`❌ Table ${table} check failed:`, error.message)
           if (error.code === "42P01" || error.message?.includes("does not exist")) {
             console.log(`❌ Table ${table} does not exist`)
             return false
           }
+          console.log(`⚠️ Table ${table} error:`, error.message)
         } else {
           console.log(`✅ Table ${table} exists`)
         }
       } catch (err) {
-        console.log(`❌ Exception checking table ${table}:`, err)
+        console.log(`❌ Error checking table ${table}:`, err)
         return false
       }
     }
 
-    console.log("✅ Database setup verification complete!")
+    console.log("✅ Database setup verified")
     return true
   } catch (error) {
-    console.error("❌ Error during database setup check:", error)
+    console.error("❌ Database setup check failed:", error)
     return false
   }
 }

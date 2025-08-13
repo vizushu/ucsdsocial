@@ -1,170 +1,52 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { supabase, isSupabaseConfigured, type Channel, type ChannelCategory } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Hash, Volume2, ExternalLink, ChevronDown, ChevronRight, Settings, LogOut, Moon, Sun } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import { Hash, Volume2, ChevronDown, ChevronRight, Settings, LogOut, Moon, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
-import { toast } from "sonner"
 
-interface User {
+interface Channel {
   id: string
   name: string
-  email: string
-  avatar: string
+  type: string
+  topic?: string
+  category_id?: string
+  position: number
 }
 
-interface Community {
+interface ChannelCategory {
   id: string
   name: string
-  description: string
-  icon: string
-  member_count: number
+  position: number
+  channels: Channel[]
 }
 
 interface DiscordSidebarProps {
-  user: User
-  community: Community
-  selectedChannel: Channel | null
-  onChannelSelect: (channel: Channel) => void
-  onBack: () => void
+  community: {
+    id: string
+    name: string
+  }
+  currentChannel: string
+  onChannelSelect: (channelId: string) => void
+  currentUser: any
   onLogout: () => void
 }
 
-interface CategoryWithChannels extends ChannelCategory {
-  channels: Channel[]
-  isCollapsed: boolean
-}
-
 export default function DiscordSidebar({
-  user,
   community,
-  selectedChannel,
+  currentChannel,
   onChannelSelect,
-  onBack,
+  currentUser,
   onLogout,
 }: DiscordSidebarProps) {
-  const [categories, setCategories] = useState<CategoryWithChannels[]>([])
-  const [loading, setLoading] = useState(true)
+  const [categories, setCategories] = useState<ChannelCategory[]>([])
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set())
   const { theme, setTheme } = useTheme()
 
   useEffect(() => {
-    loadChannelsAndCategories()
-  }, [community.id])
-
-  const loadChannelsAndCategories = async () => {
-    try {
-      if (!isSupabaseConfigured()) {
-        // Demo mode - load mock data
-        const mockCategories: CategoryWithChannels[] = [
-          {
-            id: "general-cat",
-            name: "GENERAL",
-            community_id: community.id,
-            position: 0,
-            created_at: new Date().toISOString(),
-            created_by: user.id,
-            isCollapsed: false,
-            channels: [
-              {
-                id: "general-chat",
-                name: "general",
-                type: "text" as const,
-                community_id: community.id,
-                category_id: "general-cat",
-                topic: "General discussion about the trip",
-                position: 0,
-                created_at: new Date().toISOString(),
-              },
-              {
-                id: "announcements",
-                name: "announcements",
-                type: "text" as const,
-                community_id: community.id,
-                category_id: "general-cat",
-                topic: "Important trip announcements",
-                position: 1,
-                created_at: new Date().toISOString(),
-              },
-            ],
-          },
-          {
-            id: "planning-cat",
-            name: "TRIP PLANNING",
-            community_id: community.id,
-            position: 1,
-            created_at: new Date().toISOString(),
-            created_by: user.id,
-            isCollapsed: false,
-            channels: [
-              {
-                id: "itinerary",
-                name: "itinerary",
-                type: "text" as const,
-                community_id: community.id,
-                category_id: "planning-cat",
-                topic: "Plan our daily activities",
-                position: 0,
-                created_at: new Date().toISOString(),
-              },
-              {
-                id: "checklist",
-                name: "checklist",
-                type: "text" as const,
-                community_id: community.id,
-                category_id: "planning-cat",
-                topic: "Things to bring and prepare",
-                position: 1,
-                created_at: new Date().toISOString(),
-              },
-              {
-                id: "food-planning",
-                name: "food-planning",
-                type: "text" as const,
-                community_id: community.id,
-                category_id: "planning-cat",
-                topic: "Meal planning and food prep",
-                position: 2,
-                created_at: new Date().toISOString(),
-              },
-            ],
-          },
-          {
-            id: "voice-cat",
-            name: "VOICE CHANNELS",
-            community_id: community.id,
-            position: 2,
-            created_at: new Date().toISOString(),
-            created_by: user.id,
-            isCollapsed: false,
-            channels: [
-              {
-                id: "general-voice",
-                name: "General",
-                type: "voice" as const,
-                community_id: community.id,
-                category_id: "voice-cat",
-                position: 0,
-                created_at: new Date().toISOString(),
-              },
-              {
-                id: "planning-voice",
-                name: "Planning Session",
-                type: "voice" as const,
-                community_id: community.id,
-                category_id: "voice-cat",
-                position: 1,
-                created_at: new Date().toISOString(),
-              },
-            ],
-          },
-        ]
-        setCategories(mockCategories)
-        setLoading(false)
-        return
-      }
-
+    const loadChannelsAndCategories = async () => {
       // Load categories
       const { data: categoriesData, error: categoriesError } = await supabase
         .from("channel_categories")
@@ -172,7 +54,10 @@ export default function DiscordSidebar({
         .eq("community_id", community.id)
         .order("position")
 
-      if (categoriesError) throw categoriesError
+      if (categoriesError) {
+        console.error("Error loading categories:", categoriesError)
+        return
+      }
 
       // Load channels
       const { data: channelsData, error: channelsError } = await supabase
@@ -181,13 +66,15 @@ export default function DiscordSidebar({
         .eq("community_id", community.id)
         .order("position")
 
-      if (channelsError) throw channelsError
+      if (channelsError) {
+        console.error("Error loading channels:", channelsError)
+        return
+      }
 
       // Group channels by category
-      const categoriesWithChannels: CategoryWithChannels[] = (categoriesData || []).map((category) => ({
+      const categoriesWithChannels = (categoriesData || []).map((category) => ({
         ...category,
         channels: (channelsData || []).filter((channel) => channel.category_id === category.id),
-        isCollapsed: false,
       }))
 
       // Add uncategorized channels
@@ -195,86 +82,67 @@ export default function DiscordSidebar({
       if (uncategorizedChannels.length > 0) {
         categoriesWithChannels.push({
           id: "uncategorized",
-          name: "UNCATEGORIZED",
-          community_id: community.id,
+          name: "Uncategorized",
           position: 999,
-          created_at: new Date().toISOString(),
-          created_by: user.id,
           channels: uncategorizedChannels,
-          isCollapsed: false,
         })
       }
 
       setCategories(categoriesWithChannels)
-    } catch (error) {
-      console.error("Error loading channels:", error)
-      toast.error("Failed to load channels")
-    } finally {
-      setLoading(false)
     }
-  }
+
+    loadChannelsAndCategories()
+  }, [community.id])
 
   const toggleCategory = (categoryId: string) => {
-    setCategories((prev) =>
-      prev.map((cat) => (cat.id === categoryId ? { ...cat, isCollapsed: !cat.isCollapsed } : cat)),
-    )
+    setCollapsedCategories((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(categoryId)) {
+        newSet.delete(categoryId)
+      } else {
+        newSet.add(categoryId)
+      }
+      return newSet
+    })
   }
 
-  const getChannelIcon = (type: Channel["type"]) => {
+  const getChannelIcon = (type: string) => {
     switch (type) {
-      case "text":
-        return <Hash className="w-4 h-4" />
       case "voice":
         return <Volume2 className="w-4 h-4" />
-      case "link":
-        return <ExternalLink className="w-4 h-4" />
       default:
         return <Hash className="w-4 h-4" />
     }
   }
 
-  if (loading) {
-    return (
-      <div className="w-60 bg-gray-800 dark:bg-gray-900 text-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-6 h-6 border-2 border-ucsd-gold border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-          <p className="text-sm text-gray-400">Loading...</p>
-        </div>
-      </div>
-    )
+  const getUserDisplayName = (user: any) => {
+    return user?.full_name || user?.email?.split("@")[0] || "Unknown User"
+  }
+
+  const getUserAvatar = (user: any) => {
+    const name = getUserDisplayName(user)
+    return name.charAt(0).toUpperCase()
   }
 
   return (
-    <div className="w-60 bg-gray-800 dark:bg-gray-900 text-white flex flex-col h-full">
-      {/* Community Header */}
-      <div className="p-4 border-b border-gray-700 dark:border-gray-800">
-        <Button
-          variant="ghost"
-          onClick={onBack}
-          className="w-full justify-start text-white hover:bg-gray-700 dark:hover:bg-gray-800 p-2"
-        >
-          <div className="w-8 h-8 rounded bg-ucsd-gold text-ucsd-navy flex items-center justify-center text-sm font-bold mr-3">
-            {community.icon}
-          </div>
-          <div className="text-left">
-            <div className="font-semibold text-sm truncate">{community.name}</div>
-            <div className="text-xs text-gray-400">{community.member_count} members</div>
-          </div>
-        </Button>
+    <div className="w-60 bg-gray-800 text-gray-100 flex flex-col h-full">
+      {/* Server Header */}
+      <div className="p-4 border-b border-gray-700 shadow-sm">
+        <h1 className="font-semibold text-white truncate">{community.name}</h1>
       </div>
 
       {/* Channels */}
-      <ScrollArea className="flex-1 px-2">
-        <div className="py-2">
+      <ScrollArea className="flex-1 px-2 py-4">
+        <div className="space-y-1">
           {categories.map((category) => (
-            <div key={category.id} className="mb-4">
+            <div key={category.id}>
               {/* Category Header */}
               <Button
                 variant="ghost"
+                className="w-full justify-start px-2 py-1 h-auto text-xs font-semibold text-gray-400 hover:text-gray-200 uppercase tracking-wide"
                 onClick={() => toggleCategory(category.id)}
-                className="w-full justify-start text-gray-400 hover:text-white hover:bg-gray-700 dark:hover:bg-gray-800 p-1 mb-1 text-xs font-semibold uppercase tracking-wide"
               >
-                {category.isCollapsed ? (
+                {collapsedCategories.has(category.id) ? (
                   <ChevronRight className="w-3 h-3 mr-1" />
                 ) : (
                   <ChevronDown className="w-3 h-3 mr-1" />
@@ -283,21 +151,23 @@ export default function DiscordSidebar({
               </Button>
 
               {/* Channels in Category */}
-              {!category.isCollapsed && (
-                <div className="ml-2">
+              {!collapsedCategories.has(category.id) && (
+                <div className="ml-2 space-y-0.5">
                   {category.channels.map((channel) => (
                     <Button
                       key={channel.id}
                       variant="ghost"
-                      onClick={() => onChannelSelect(channel)}
-                      className={`w-full justify-start text-gray-300 hover:text-white hover:bg-gray-700 dark:hover:bg-gray-800 p-2 mb-1 text-sm ${
-                        selectedChannel?.id === channel.id ? "bg-gray-700 dark:bg-gray-800 text-white" : ""
+                      className={`w-full justify-start px-2 py-1.5 h-auto text-sm font-medium rounded ${
+                        currentChannel === channel.id
+                          ? "bg-gray-600 text-white"
+                          : "text-gray-300 hover:bg-gray-700 hover:text-gray-100"
                       }`}
+                      onClick={() => onChannelSelect(channel.id)}
                     >
-                      <span className="mr-2 text-gray-400">{getChannelIcon(channel.type)}</span>
-                      <span className="truncate">{channel.name}</span>
-                      {/* Unread indicator placeholder */}
-                      {/* <span className="ml-auto w-2 h-2 bg-red-500 rounded-full"></span> */}
+                      {getChannelIcon(channel.type)}
+                      <span className="ml-2 truncate">{channel.name}</span>
+                      {/* Unread badge placeholder */}
+                      {/* <Badge variant="secondary" className="ml-auto">3</Badge> */}
                     </Button>
                   ))}
                 </div>
@@ -308,38 +178,35 @@ export default function DiscordSidebar({
       </ScrollArea>
 
       {/* User Panel */}
-      <div className="p-3 border-t border-gray-700 dark:border-gray-800 bg-gray-750 dark:bg-gray-850">
+      <div className="p-3 bg-gray-900 border-t border-gray-700">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-ucsd-gold text-ucsd-navy flex items-center justify-center text-sm font-medium">
-              {user.avatar}
+            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
+              {getUserAvatar(currentUser)}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-white truncate">{user.name}</div>
-              <div className="text-xs text-gray-400 truncate">{user.email}</div>
+              <div className="text-sm font-medium text-white truncate">{getUserDisplayName(currentUser)}</div>
+              <div className="text-xs text-gray-400">Online</div>
             </div>
           </div>
+
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="sm"
+              className="h-8 w-8 p-0 text-gray-400 hover:text-white hover:bg-gray-700"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              className="w-8 h-8 p-0 text-gray-400 hover:text-white hover:bg-gray-700 dark:hover:bg-gray-800"
             >
               {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-8 h-8 p-0 text-gray-400 hover:text-white hover:bg-gray-700 dark:hover:bg-gray-800"
-            >
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-400 hover:text-white hover:bg-gray-700">
               <Settings className="w-4 h-4" />
             </Button>
             <Button
               variant="ghost"
               size="sm"
+              className="h-8 w-8 p-0 text-gray-400 hover:text-white hover:bg-gray-700"
               onClick={onLogout}
-              className="w-8 h-8 p-0 text-gray-400 hover:text-white hover:bg-gray-700 dark:hover:bg-gray-800"
             >
               <LogOut className="w-4 h-4" />
             </Button>

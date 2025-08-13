@@ -316,41 +316,83 @@ export const toggleStarCommunity = async (userId: string, communityId: string, i
   }
 }
 
-// Check if database tables exist
+// Enhanced database setup check with detailed logging
 export const checkDatabaseSetup = async (): Promise<boolean> => {
+  console.log("🔍 Starting comprehensive database setup check...")
+
   try {
-    console.log("Checking database setup...")
+    // Check environment variables first
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      console.log("❌ Missing Supabase environment variables")
+      return false
+    }
+    console.log("✅ Environment variables present")
 
     // Try to query multiple tables to ensure they all exist
-    const tables = ["communities", "channels", "community_members"]
+    const tables = [
+      "communities",
+      "channels",
+      "community_members",
+      "messages",
+      "itinerary_activities",
+      "checklist_items",
+      "food_items",
+    ]
 
+    console.log("🔍 Checking table existence...")
     for (const table of tables) {
-      const { data, error } = await supabase.from(table).select("id").limit(1)
+      try {
+        const { data, error } = await supabase.from(table).select("id").limit(1)
 
-      if (error) {
-        console.log(`Database check error for table ${table}:`, error)
+        if (error) {
+          console.log(`❌ Table ${table} check failed:`, error.message, error.code)
 
-        // Check for table not found errors
-        if (
-          error.code === "42P01" ||
-          error.message?.includes("does not exist") ||
-          error.message?.includes("relation") ||
-          error.message?.includes("table")
-        ) {
-          console.log(`Table ${table} not found`)
-          return false
+          // Check for table not found errors
+          if (
+            error.code === "42P01" ||
+            error.message?.includes("does not exist") ||
+            error.message?.includes("relation") ||
+            error.message?.includes("table")
+          ) {
+            console.log(`❌ Table ${table} does not exist`)
+            return false
+          }
+
+          // For other errors, log but continue checking
+          console.warn(`⚠️ Table ${table} exists but query failed:`, error)
+        } else {
+          console.log(`✅ Table ${table} exists and accessible`)
         }
-
-        // For other errors, continue checking other tables
-        console.warn(`Table ${table} exists but query failed:`, error)
+      } catch (err) {
+        console.log(`❌ Exception checking table ${table}:`, err)
+        return false
       }
     }
 
-    console.log("Database setup verified - all tables exist")
+    // Test data access
+    console.log("🔍 Testing data access...")
+    try {
+      const { data: communities, error: commError } = await supabase.from("communities").select("id, name").limit(5)
+
+      if (commError) {
+        console.log("❌ Failed to query communities:", commError.message)
+        return false
+      }
+
+      console.log(`✅ Successfully queried communities: ${communities?.length || 0} found`)
+
+      if (communities && communities.length > 0) {
+        console.log("✅ Sample community:", communities[0].name)
+      }
+    } catch (err) {
+      console.log("❌ Exception during data access test:", err)
+      return false
+    }
+
+    console.log("✅ Database setup verification complete - all checks passed!")
     return true
   } catch (error) {
-    console.error("Error checking database setup:", error)
-    // If we can't check, assume database is not set up
+    console.error("❌ Error during database setup check:", error)
     return false
   }
 }

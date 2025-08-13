@@ -1,39 +1,63 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 
 // Check if environment variables are available
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-// Create a dummy client if environment variables are missing
-const createSupabaseClient = () => {
+// Lazy client creation
+let _supabaseClient: SupabaseClient | null = null
+
+const getSupabaseClient = () => {
+  if (_supabaseClient) return _supabaseClient
+
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn("Supabase environment variables not found. Creating dummy client.")
-    // Return a dummy client that won't make network requests
-    return {
-      auth: {
+    console.warn("Supabase environment variables not found.")
+    // Return null instead of creating a dummy client
+    return null
+  }
+
+  _supabaseClient = createClient(supabaseUrl, supabaseAnonKey)
+  return _supabaseClient
+}
+
+// Export a proxy object that checks configuration before each call
+export const supabase = {
+  get auth() {
+    const client = getSupabaseClient()
+    if (!client) {
+      return {
         signInWithPassword: () => Promise.reject(new Error("Supabase not configured")),
         signInWithOAuth: () => Promise.reject(new Error("Supabase not configured")),
         signUp: () => Promise.reject(new Error("Supabase not configured")),
         signOut: () => Promise.reject(new Error("Supabase not configured")),
         getUser: () => Promise.resolve({ data: { user: null }, error: null }),
         onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-      },
-      from: () => ({
+      }
+    }
+    return client.auth
+  },
+  from: (table: string) => {
+    const client = getSupabaseClient()
+    if (!client) {
+      return {
         select: () => Promise.reject(new Error("Supabase not configured")),
         insert: () => Promise.reject(new Error("Supabase not configured")),
         update: () => Promise.reject(new Error("Supabase not configured")),
         delete: () => Promise.reject(new Error("Supabase not configured")),
-      }),
-      channel: () => ({
+      }
+    }
+    return client.from(table)
+  },
+  channel: (name: string) => {
+    const client = getSupabaseClient()
+    if (!client) {
+      return {
         on: () => ({ subscribe: () => {} }),
-      }),
-    } as any
-  }
-
-  return createClient(supabaseUrl, supabaseAnonKey)
+      }
+    }
+    return client.channel(name)
+  },
 }
-
-export const supabase = createSupabaseClient()
 
 // Database types
 export interface Community {

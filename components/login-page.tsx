@@ -6,10 +6,9 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { supabase } from "@/lib/supabase"
-import { handleError } from "@/lib/error-handler"
+import { isSupabaseConfigured } from "@/lib/supabase"
 import type { User } from "@/app/page"
-import { ChromeIcon, GithubIcon } from "lucide-react"
+import { ChromeIcon, GithubIcon, AlertCircle } from "lucide-react"
 
 interface LoginPageProps {
   onLogin: (user: User) => void
@@ -23,11 +22,28 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [isSignUp, setIsSignUp] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
+  const [supabaseConfigured, setSupabaseConfigured] = useState(false)
 
   useEffect(() => {
     const timer = setTimeout(() => setIsMounted(true), 100)
+    setSupabaseConfigured(isSupabaseConfigured())
     return () => clearTimeout(timer)
   }, [])
+
+  const handleDemoLogin = () => {
+    // Create a demo user for when Supabase isn't configured
+    const demoUser: User = {
+      id: "demo-user-id",
+      name:
+        email
+          .split("@")[0]
+          .replace(/[._]/g, " ")
+          .replace(/\b\w/g, (l: string) => l.toUpperCase()) || "Demo User",
+      email: email || "demo@ucsd.edu",
+      avatar: (email.split("@")[0]?.charAt(0) || "D").toUpperCase(),
+    }
+    onLogin(demoUser)
+  }
 
   const handleEmailPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -35,9 +51,24 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     setIsLoading(true)
 
     // Check if Supabase is configured
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      setError("Supabase is not configured. Please add the Supabase integration to your v0 project.")
-      setIsLoading(false)
+    if (!supabaseConfigured) {
+      // For demo mode, just validate email format and proceed
+      if (!email.endsWith("@ucsd.edu")) {
+        setError("Please use your UCSD email address (@ucsd.edu)")
+        setIsLoading(false)
+        return
+      }
+      if (!password || password.length < 6) {
+        setError("Password must be at least 6 characters")
+        setIsLoading(false)
+        return
+      }
+
+      // Simulate a brief loading time for demo
+      setTimeout(() => {
+        handleDemoLogin()
+        setIsLoading(false)
+      }, 1000)
       return
     }
 
@@ -53,6 +84,9 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     }
 
     try {
+      // Dynamic import to avoid loading Supabase if not configured
+      const { supabase } = await import("@/lib/supabase")
+
       if (isSignUp) {
         if (password !== confirmPassword) {
           setError("Passwords do not match")
@@ -89,14 +123,8 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         if (signInError) throw signInError
       }
     } catch (err: any) {
-      handleError(err)
-
-      // Check for specific network/configuration errors
-      if (err.message?.includes("Failed to fetch") || err.message?.includes("Supabase not configured")) {
-        setError("Supabase is not configured. Please add the Supabase integration to your v0 project.")
-      } else {
-        setError(err.message || "An error occurred. Please try again.")
-      }
+      console.error("Auth error:", err)
+      setError(err.message || "An error occurred. Please try again.")
     } finally {
       setIsLoading(false)
     }
@@ -106,14 +134,17 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     setIsLoading(true)
     setError("")
 
-    // Check if Supabase is configured
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      setError("Supabase is not configured. Please add the Supabase integration to your v0 project.")
-      setIsLoading(false)
+    if (!supabaseConfigured) {
+      setError("Social login requires Supabase configuration. Using demo mode instead.")
+      setTimeout(() => {
+        handleDemoLogin()
+        setIsLoading(false)
+      }, 1000)
       return
     }
 
     try {
+      const { supabase } = await import("@/lib/supabase")
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
@@ -123,13 +154,8 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
       if (error) throw error
     } catch (err: any) {
-      handleError(err)
-
-      if (err.message?.includes("Failed to fetch") || err.message?.includes("Supabase not configured")) {
-        setError("Supabase is not configured. Please add the Supabase integration to your v0 project.")
-      } else {
-        setError(err.message || "Social login failed")
-      }
+      console.error("Social login error:", err)
+      setError(err.message || "Social login failed")
       setIsLoading(false)
     }
   }
@@ -155,6 +181,15 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               <br />
               Experience
             </h1>
+            {!supabaseConfigured && (
+              <div className="mt-4 p-3 bg-amber-100 border border-amber-300 rounded-lg flex items-start space-x-2">
+                <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-amber-800">
+                  <p className="font-medium">Demo Mode</p>
+                  <p>Supabase not configured. You can still explore the app with demo data.</p>
+                </div>
+              </div>
+            )}
           </div>
 
           <form onSubmit={handleEmailPasswordSubmit} className="space-y-5">

@@ -67,14 +67,17 @@ export default function App() {
 
   const checkUser = async () => {
     try {
-      // Check if Supabase is configured
-      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-        console.log("Supabase not configured, staying on login page")
+      // Check if Supabase is configured first
+      const { isSupabaseConfigured } = await import("@/lib/supabase")
+
+      if (!isSupabaseConfigured()) {
+        console.log("Supabase not configured, staying on login page for demo mode")
         setCurrentUser(null)
         setCurrentView("login")
         return
       }
 
+      const { supabase } = await import("@/lib/supabase")
       const {
         data: { user },
         error,
@@ -82,7 +85,6 @@ export default function App() {
 
       if (error) {
         console.log("Auth error:", error.message)
-        // Don't throw error for missing session, just set no user
         setCurrentUser(null)
         setCurrentView("login")
         return
@@ -103,7 +105,6 @@ export default function App() {
       }
     } catch (error) {
       console.log("Error checking user:", error)
-      // Don't show error toast for missing auth session
       setCurrentUser(null)
       setCurrentView("login")
     } finally {

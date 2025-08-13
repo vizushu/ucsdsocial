@@ -3,8 +3,10 @@
 import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Hash, Menu } from "lucide-react"
+import { ArrowLeft, Hash, Menu, ExternalLink } from "lucide-react"
 import ChatChannel from "@/components/chat-channel"
+import ItineraryChannel from "@/components/itinerary-channel"
+import ChecklistChannel from "@/components/checklist-channel"
 import type { User, Community, Channel } from "@/app/page"
 
 interface CommunityPageProps {
@@ -42,6 +44,22 @@ export default function CommunityPage({ user, community, onBack, onLogout }: Com
       console.error("Error loading channels:", error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const renderChannelContent = () => {
+    const channel = channels.find((c) => c.id === activeChannel)
+    if (!channel) return null
+
+    switch (channel.name) {
+      case "chat":
+        return <ChatChannel user={user} channelId={channel.id} communityId={community.id} />
+      case "itinerary":
+        return <ItineraryChannel user={user} channelId={channel.id} communityId={community.id} />
+      case "gear-checklist":
+        return <ChecklistChannel user={user} channelId={channel.id} communityId={community.id} />
+      default:
+        return <ChatChannel user={user} channelId={channel.id} communityId={community.id} />
     }
   }
 
@@ -87,21 +105,42 @@ export default function CommunityPage({ user, community, onBack, onLogout }: Com
           <div className="flex-1 overflow-y-auto p-4">
             <div className="space-y-1">
               <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-3">Channels</h3>
-              {channels.map((channel) => (
-                <button
-                  key={channel.id}
-                  onClick={() => {
-                    setActiveChannel(channel.id)
-                    setSidebarOpen(false)
-                  }}
-                  className={`w-full flex items-center space-x-2 p-2 rounded-lg text-left transition-colors ${
-                    activeChannel === channel.id ? "bg-ucsd-gold text-ucsd-navy" : "text-gray-700 hover:bg-gray-100"
-                  }`}
-                >
-                  <Hash className="h-4 w-4" />
-                  <span className="text-sm font-medium">{channel.name}</span>
-                </button>
-              ))}
+              {channels.map((channel) => {
+                if (channel.href) {
+                  // External link channel
+                  return (
+                    <a
+                      key={channel.id}
+                      href={channel.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full flex items-center justify-between p-2 rounded-lg text-left transition-colors text-gray-700 hover:bg-gray-100"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <Hash className="h-4 w-4" />
+                        <span className="text-sm font-medium">{channel.name}</span>
+                      </div>
+                      <ExternalLink className="h-4 w-4 text-gray-400" />
+                    </a>
+                  )
+                }
+
+                return (
+                  <button
+                    key={channel.id}
+                    onClick={() => {
+                      setActiveChannel(channel.id)
+                      setSidebarOpen(false)
+                    }}
+                    className={`w-full flex items-center space-x-2 p-2 rounded-lg text-left transition-colors ${
+                      activeChannel === channel.id ? "bg-ucsd-gold text-ucsd-navy" : "text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    <Hash className="h-4 w-4" />
+                    <span className="text-sm font-medium">{channel.name}</span>
+                  </button>
+                )
+              })}
             </div>
           </div>
 
@@ -147,9 +186,7 @@ export default function CommunityPage({ user, community, onBack, onLogout }: Com
         </div>
 
         {/* Channel Content */}
-        <div className="flex-1 overflow-hidden">
-          {activeChannelData && <ChatChannel user={user} channelId={activeChannel} communityId={community.id} />}
-        </div>
+        <div className="flex-1 overflow-hidden">{renderChannelContent()}</div>
       </div>
 
       {/* Sidebar Overlay */}

@@ -1,100 +1,32 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
-import Image from "next/image"
+
+import { useState } from "react"
+import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { isSupabaseConfigured } from "@/lib/supabase"
-import type { User } from "@/app/page"
-import { ChromeIcon, GithubIcon, AlertCircle } from "lucide-react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { toast } from "sonner"
 
-interface LoginPageProps {
-  onLogin: (user: User) => void
-}
-
-export default function LoginPage({ onLogin }: LoginPageProps) {
+export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [error, setError] = useState("")
   const [isSignUp, setIsSignUp] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [isMounted, setIsMounted] = useState(false)
-  const [supabaseConfigured, setSupabaseConfigured] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    const timer = setTimeout(() => setIsMounted(true), 100)
-    setSupabaseConfigured(isSupabaseConfigured())
-    return () => clearTimeout(timer)
-  }, [])
-
-  const handleDemoLogin = () => {
-    // Create a demo user for when Supabase isn't configured
-    const demoUser: User = {
-      id: "demo-user-id",
-      name:
-        email
-          .split("@")[0]
-          .replace(/[._]/g, " ")
-          .replace(/\b\w/g, (l: string) => l.toUpperCase()) || "Demo User",
-      email: email || "demo@ucsd.edu",
-      avatar: (email.split("@")[0]?.charAt(0) || "D").toUpperCase(),
-    }
-    onLogin(demoUser)
-  }
-
-  const handleEmailPasswordSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError("")
-    setIsLoading(true)
-
-    // Check if Supabase is configured
-    if (!supabaseConfigured) {
-      // For demo mode, just validate email format and proceed
-      if (!email.endsWith("@ucsd.edu")) {
-        setError("Please use your UCSD email address (@ucsd.edu)")
-        setIsLoading(false)
-        return
-      }
-      if (!password || password.length < 6) {
-        setError("Password must be at least 6 characters")
-        setIsLoading(false)
-        return
-      }
-
-      // Simulate a brief loading time for demo
-      setTimeout(() => {
-        handleDemoLogin()
-        setIsLoading(false)
-      }, 1000)
-      return
-    }
-
-    if (!email.endsWith("@ucsd.edu")) {
-      setError("Please use your UCSD email address (@ucsd.edu)")
-      setIsLoading(false)
-      return
-    }
-    if (!password || password.length < 6) {
-      setError("Password must be at least 6 characters")
-      setIsLoading(false)
-      return
-    }
+    setLoading(true)
 
     try {
-      // Dynamic import to avoid loading Supabase if not configured
-      const { supabase } = await import("@/lib/supabase")
+      if (!email.endsWith("@ucsd.edu")) {
+        throw new Error("Please use your UCSD email address")
+      }
 
       if (isSignUp) {
-        if (password !== confirmPassword) {
-          setError("Passwords do not match")
-          setIsLoading(false)
-          return
-        }
-
-        const { data, error: signUpError } = await supabase.auth.signUp({
+        const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -102,228 +34,105 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               name: email
                 .split("@")[0]
                 .replace(/[._]/g, " ")
-                .replace(/\b\w/g, (l: string) => l.toUpperCase()),
+                .replace(/\b\w/g, (l) => l.toUpperCase()),
             },
           },
         })
-
-        if (signUpError) throw signUpError
-
-        if (data.user && !data.session) {
-          setError("Please check your email for a confirmation link")
-          setIsLoading(false)
-          return
-        }
+        if (error) throw error
+        toast.success("Check your email for confirmation link!")
       } else {
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
         })
-
-        if (signInError) throw signInError
+        if (error) throw error
+        toast.success("Welcome back!")
       }
-    } catch (err: any) {
-      console.error("Auth error:", err)
-      setError(err.message || "An error occurred. Please try again.")
+    } catch (error: any) {
+      toast.error(error.message)
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
-  const handleSocialLogin = async (provider: "google" | "github") => {
-    setIsLoading(true)
-    setError("")
-
-    if (!supabaseConfigured) {
-      setError("Social login requires Supabase configuration. Using demo mode instead.")
-      setTimeout(() => {
-        handleDemoLogin()
-        setIsLoading(false)
-      }, 1000)
-      return
-    }
-
+  const handleGoogleSignIn = async () => {
     try {
-      const { supabase } = await import("@/lib/supabase")
       const { error } = await supabase.auth.signInWithOAuth({
-        provider,
+        provider: "google",
         options: {
           redirectTo: `${window.location.origin}`,
         },
       })
-
       if (error) throw error
-    } catch (err: any) {
-      console.error("Social login error:", err)
-      setError(err.message || "Social login failed")
-      setIsLoading(false)
+    } catch (error: any) {
+      toast.error(error.message)
     }
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-100 dark:bg-gray-900 relative overflow-hidden">
-      <div className="absolute inset-0 z-0">
-        <Image src="/images/ucsd-social-poster.png" alt="UCSD Social Poster" layout="fill" objectFit="cover" priority />
-      </div>
-
-      <div
-        className={`absolute bottom-0 left-0 right-0 h-[70vh] sm:h-[60vh] 
-                   bg-white/60 dark:bg-gray-800/60 backdrop-blur-md 
-                   rounded-t-3xl shadow-2xl p-6 sm:p-8 flex flex-col 
-                   transition-transform duration-700 ease-in-out transform z-10 ${
-                     isMounted ? "translate-y-0" : "translate-y-full"
-                   }`}
-      >
-        <div className="flex-grow overflow-y-auto space-y-6">
-          <div className="mb-6">
-            <h1 className="text-3xl sm:text-4xl font-bold text-ucsd-navy dark:text-white leading-tight">
-              The Best <span className="text-ucsd-gold">UCSD</span>
-              <br />
-              Experience
-            </h1>
-            {!supabaseConfigured && (
-              <div className="mt-4 p-3 bg-amber-100 border border-amber-300 rounded-lg flex items-start space-x-2">
-                <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-amber-800">
-                  <p className="font-medium">Demo Mode</p>
-                  <p>Supabase not configured. You can still explore the app with demo data.</p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <form onSubmit={handleEmailPasswordSubmit} className="space-y-5">
-            <div>
-              <Label htmlFor="email" className="text-gray-600 dark:text-gray-300 text-xs font-medium">
-                UCSD Email
-              </Label>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-ucsd-navy to-ucsd-blue p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl font-bold text-ucsd-navy">Welcome to UCSD Social</CardTitle>
+          <CardDescription>Connect with fellow Tritons and join amazing communities</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">UCSD Email</Label>
               <Input
                 id="email"
                 type="email"
+                placeholder="your.name@ucsd.edu"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="your.name@ucsd.edu"
-                className="mt-1 py-2.5 border-0 border-b-2 border-gray-400/70 dark:border-gray-500/70 rounded-none bg-transparent px-0 focus:border-ucsd-gold focus:ring-0 text-ucsd-navy dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                 required
-                disabled={isLoading}
               />
             </div>
-
-            <div>
-              <Label htmlFor="password" className="text-gray-600 dark:text-gray-300 text-xs font-medium">
-                Password
-              </Label>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 type="password"
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="mt-1 py-2.5 border-0 border-b-2 border-gray-400/70 dark:border-gray-500/70 rounded-none bg-transparent px-0 focus:border-ucsd-gold focus:ring-0 text-ucsd-navy dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                 required
-                disabled={isLoading}
               />
             </div>
-
-            {isSignUp && (
-              <div>
-                <Label htmlFor="confirmPassword" className="text-gray-600 dark:text-gray-300 text-xs font-medium">
-                  Confirm Password
-                </Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="mt-1 py-2.5 border-0 border-b-2 border-gray-400/70 dark:border-gray-500/70 rounded-none bg-transparent px-0 focus:border-ucsd-gold focus:ring-0 text-ucsd-navy dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                  required
-                  disabled={isLoading}
-                />
-              </div>
-            )}
-
-            {error && (
-              <div className="text-red-600 dark:text-red-400 text-sm text-center bg-red-100/80 dark:bg-red-900/70 p-2.5 rounded-lg border border-red-300 dark:border-red-700">
-                {error}
-              </div>
-            )}
-
-            <div className="flex items-end justify-between pt-6">
-              <div className="text-left">
-                <p className="text-gray-600 dark:text-gray-300 text-xs mb-0.5">
-                  {isSignUp ? "Already have an account?" : "New here?"}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsSignUp(!isSignUp)
-                    setError("")
-                  }}
-                  className="text-ucsd-navy dark:text-ucsd-gold font-semibold text-sm hover:text-ucsd-blue dark:hover:text-yellow-300 transition-colors"
-                  disabled={isLoading}
-                >
-                  {isSignUp ? "Log in" : "Sign up"} →
-                </button>
-              </div>
-
-              <Button
-                type="submit"
-                disabled={isLoading}
-                className="bg-ucsd-gold hover:bg-yellow-500 active:bg-yellow-600 disabled:bg-yellow-300 text-ucsd-navy rounded-full w-20 h-20 sm:w-24 sm:h-24 text-lg font-semibold shadow-xl transition-all duration-200 hover:scale-105 active:scale-95 flex-shrink-0 flex items-center justify-center"
-              >
-                {isLoading ? (
-                  <div className="w-6 h-6 border-2 border-ucsd-navy border-t-transparent rounded-full animate-spin"></div>
-                ) : isSignUp ? (
-                  "Sign up"
-                ) : (
-                  "Log in"
-                )}
-              </Button>
-            </div>
+            <Button
+              type="submit"
+              className="w-full bg-ucsd-gold hover:bg-yellow-500 text-ucsd-navy font-semibold"
+              disabled={loading}
+            >
+              {loading ? "Loading..." : isSignUp ? "Sign Up" : "Sign In"}
+            </Button>
           </form>
 
-          <div className="relative my-6">
+          <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-gray-300/70 dark:border-gray-600/70" />
+              <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white/60 dark:bg-gray-800/60 px-2 text-gray-500 dark:text-gray-400">
-                Or continue with
-              </span>
+              <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
             </div>
           </div>
 
-          <div className="space-y-3 pb-4">
-            <Button
-              variant="outline"
-              className="w-full bg-white/50 dark:bg-gray-700/50 hover:bg-white/70 dark:hover:bg-gray-700/70 border-gray-300/70 dark:border-gray-600/70 text-gray-700 dark:text-gray-200"
-              onClick={() => handleSocialLogin("google")}
-              disabled={isLoading}
+          <Button variant="outline" className="w-full bg-transparent" onClick={handleGoogleSignIn}>
+            Continue with Google
+          </Button>
+
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => setIsSignUp(!isSignUp)}
+              className="text-sm text-ucsd-blue hover:underline"
             >
-              {isLoading ? (
-                <div className="w-5 h-5 border-2 border-gray-500 dark:border-gray-400 border-t-transparent rounded-full animate-spin mr-2"></div>
-              ) : (
-                <ChromeIcon className="mr-2 h-5 w-5 text-red-500" />
-              )}
-              Sign in with Google
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full bg-white/50 dark:bg-gray-700/50 hover:bg-white/70 dark:hover:bg-gray-700/70 border-gray-300/70 dark:border-gray-600/70 text-gray-700 dark:text-gray-200"
-              onClick={() => handleSocialLogin("github")}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <div className="w-5 h-5 border-2 border-gray-500 dark:border-gray-400 border-t-transparent rounded-full animate-spin mr-2"></div>
-              ) : (
-                <GithubIcon className="mr-2 h-5 w-5" />
-              )}
-              Sign in with GitHub
-            </Button>
+              {isSignUp ? "Already have an account? Sign in" : "Don't have an account? Sign up"}
+            </button>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

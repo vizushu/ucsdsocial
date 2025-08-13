@@ -69,22 +69,31 @@
   }
 }
 
-/* Apple-style font classes */
-.font-apple-display {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
-  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+/* UCSD Brand Colors */
+.text-ucsd-navy {
+  color: #182b49;
 }
-
-.font-apple-text {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
-  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+.text-ucsd-gold {
+  color: #ffcd00;
 }
-
-/* Apple-style text shadows for better readability */
-.text-shadow-apple {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+.text-ucsd-blue {
+  color: #00629b;
 }
-
-.text-shadow-apple-strong {
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+.bg-ucsd-navy {
+  background-color: #182b49;
+}
+.bg-ucsd-gold {
+  background-color: #ffcd00;
+}
+.bg-ucsd-blue {
+  background-color: #00629b;
+}
+.border-ucsd-gold {
+  border-color: #ffcd00;
+}
+.hover\:bg-ucsd-gold:hover {
+  background-color: #ffcd00;
+}
+.hover\:bg-ucsd-navy:hover {
+  background-color: #182b49;
 }

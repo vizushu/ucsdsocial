@@ -217,12 +217,13 @@ const getSupabaseClient = () => {
 // Export the client
 export const supabase = getSupabaseClient()
 
-// Type definitions
+// Database types
 export interface Community {
   id: string
   name: string
   description: string
   icon: string
+  member_count: number
   created_at: string
   created_by: string
 }
@@ -241,9 +242,10 @@ export interface Message {
   content: string
   user_id: string
   channel_id: string
-  created_at: string
   user_name: string
   user_avatar: string
+  reply_to?: string
+  created_at: string
 }
 
 export interface CommunityMember {
@@ -283,176 +285,4 @@ export interface FoodItem {
   channel_id: string
   created_at: string
   created_by: string
-}
-
-// Utility functions with comprehensive error handling
-export const getCurrentUser = async () => {
-  if (!isSupabaseConfigured()) {
-    console.log("🎭 Demo mode: No user authentication")
-    return null
-  }
-
-  try {
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser()
-
-    if (error) {
-      console.log("⚠️ Auth error:", error.message)
-      return null
-    }
-
-    return user
-  } catch (error) {
-    console.error("❌ Error getting current user:", error)
-    return null
-  }
-}
-
-export const joinCommunity = async (userId: string, communityId: string) => {
-  if (!isSupabaseConfigured()) {
-    throw new Error("Demo mode: Database operations not available")
-  }
-
-  if (!userId || !communityId) {
-    throw new Error("User ID and Community ID are required")
-  }
-
-  try {
-    // Check if already a member
-    const { data: existingMember, error: checkError } = await supabase
-      .from("community_members")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("community_id", communityId)
-      .maybeSingle()
-
-    if (checkError) {
-      console.error("Error checking membership:", checkError)
-      throw new Error(`Failed to check membership: ${checkError.message}`)
-    }
-
-    if (existingMember) {
-      throw new Error("Already a member of this community")
-    }
-
-    // Join the community
-    const { data, error } = await supabase
-      .from("community_members")
-      .insert({
-        user_id: userId,
-        community_id: communityId,
-        is_starred: false,
-      })
-      .select()
-
-    if (error) {
-      console.error("Error joining community:", error)
-      throw new Error(`Failed to join community: ${error.message}`)
-    }
-
-    return data
-  } catch (error) {
-    console.error("joinCommunity error:", error)
-    throw error
-  }
-}
-
-export const leaveCommunity = async (userId: string, communityId: string) => {
-  if (!isSupabaseConfigured()) {
-    throw new Error("Demo mode: Database operations not available")
-  }
-
-  if (!userId || !communityId) {
-    throw new Error("User ID and Community ID are required")
-  }
-
-  try {
-    const { error } = await supabase
-      .from("community_members")
-      .delete()
-      .eq("user_id", userId)
-      .eq("community_id", communityId)
-
-    if (error) {
-      console.error("Error leaving community:", error)
-      throw new Error(`Failed to leave community: ${error.message}`)
-    }
-  } catch (error) {
-    console.error("leaveCommunity error:", error)
-    throw error
-  }
-}
-
-export const toggleStarCommunity = async (userId: string, communityId: string, isStarred: boolean) => {
-  if (!isSupabaseConfigured()) {
-    throw new Error("Demo mode: Database operations not available")
-  }
-
-  if (!userId || !communityId) {
-    throw new Error("User ID and Community ID are required")
-  }
-
-  try {
-    const { error } = await supabase
-      .from("community_members")
-      .update({ is_starred: isStarred })
-      .eq("user_id", userId)
-      .eq("community_id", communityId)
-
-    if (error) {
-      console.error("Error toggling star:", error)
-      throw new Error(`Failed to toggle star: ${error.message}`)
-    }
-  } catch (error) {
-    console.error("toggleStarCommunity error:", error)
-    throw error
-  }
-}
-
-export const checkDatabaseSetup = async (): Promise<boolean> => {
-  console.log("🔍 Checking database setup...")
-
-  if (!isSupabaseConfigured()) {
-    console.log("❌ Supabase not configured")
-    return false
-  }
-
-  try {
-    const tables = [
-      "communities",
-      "channels",
-      "community_members",
-      "messages",
-      "itinerary_activities",
-      "checklist_items",
-      "food_items",
-    ]
-
-    for (const table of tables) {
-      try {
-        const { error } = await supabase.from(table).select("id").limit(1)
-
-        if (error) {
-          if (error.code === "42P01" || error.message?.includes("does not exist")) {
-            console.log(`❌ Table ${table} does not exist`)
-            return false
-          }
-          console.log(`⚠️ Table ${table} error:`, error.message)
-        } else {
-          console.log(`✅ Table ${table} exists`)
-        }
-      } catch (err) {
-        console.log(`❌ Error checking table ${table}:`, err)
-        return false
-      }
-    }
-
-    console.log("✅ Database setup verified")
-    return true
-  } catch (error) {
-    console.error("❌ Database setup check failed:", error)
-    return false
-  }
 }

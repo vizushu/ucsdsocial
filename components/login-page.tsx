@@ -34,6 +34,13 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     setError("")
     setIsLoading(true)
 
+    // Check if Supabase is configured
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      setError("Supabase is not configured. Please add the Supabase integration to your v0 project.")
+      setIsLoading(false)
+      return
+    }
+
     if (!email.endsWith("@ucsd.edu")) {
       setError("Please use your UCSD email address (@ucsd.edu)")
       setIsLoading(false)
@@ -83,7 +90,13 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       }
     } catch (err: any) {
       handleError(err)
-      setError(err.message || "An error occurred. Please try again.")
+
+      // Check for specific network/configuration errors
+      if (err.message?.includes("Failed to fetch") || err.message?.includes("Supabase not configured")) {
+        setError("Supabase is not configured. Please add the Supabase integration to your v0 project.")
+      } else {
+        setError(err.message || "An error occurred. Please try again.")
+      }
     } finally {
       setIsLoading(false)
     }
@@ -92,6 +105,13 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const handleSocialLogin = async (provider: "google" | "github") => {
     setIsLoading(true)
     setError("")
+
+    // Check if Supabase is configured
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      setError("Supabase is not configured. Please add the Supabase integration to your v0 project.")
+      setIsLoading(false)
+      return
+    }
 
     try {
       const { error } = await supabase.auth.signInWithOAuth({
@@ -104,7 +124,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       if (error) throw error
     } catch (err: any) {
       handleError(err)
-      setError(err.message || "Social login failed")
+
+      if (err.message?.includes("Failed to fetch") || err.message?.includes("Supabase not configured")) {
+        setError("Supabase is not configured. Please add the Supabase integration to your v0 project.")
+      } else {
+        setError(err.message || "Social login failed")
+      }
       setIsLoading(false)
     }
   }

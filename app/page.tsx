@@ -67,6 +67,14 @@ export default function App() {
 
   const checkUser = async () => {
     try {
+      // Check if Supabase is configured
+      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+        console.log("Supabase not configured, staying on login page")
+        setCurrentUser(null)
+        setCurrentView("login")
+        return
+      }
+
       const {
         data: { user },
         error,

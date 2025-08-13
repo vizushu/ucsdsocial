@@ -1,9 +1,39 @@
 import { createClient } from "@supabase/supabase-js"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+// Check if environment variables are available
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Create a dummy client if environment variables are missing
+const createSupabaseClient = () => {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn("Supabase environment variables not found. Creating dummy client.")
+    // Return a dummy client that won't make network requests
+    return {
+      auth: {
+        signInWithPassword: () => Promise.reject(new Error("Supabase not configured")),
+        signInWithOAuth: () => Promise.reject(new Error("Supabase not configured")),
+        signUp: () => Promise.reject(new Error("Supabase not configured")),
+        signOut: () => Promise.reject(new Error("Supabase not configured")),
+        getUser: () => Promise.resolve({ data: { user: null }, error: null }),
+        onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      },
+      from: () => ({
+        select: () => Promise.reject(new Error("Supabase not configured")),
+        insert: () => Promise.reject(new Error("Supabase not configured")),
+        update: () => Promise.reject(new Error("Supabase not configured")),
+        delete: () => Promise.reject(new Error("Supabase not configured")),
+      }),
+      channel: () => ({
+        on: () => ({ subscribe: () => {} }),
+      }),
+    } as any
+  }
+
+  return createClient(supabaseUrl, supabaseAnonKey)
+}
+
+export const supabase = createSupabaseClient()
 
 // Database types
 export interface Community {
@@ -73,9 +103,19 @@ export interface FoodItem {
   created_by: string
 }
 
+// Check if Supabase is properly configured
+export const isSupabaseConfigured = () => {
+  return !!(supabaseUrl && supabaseAnonKey)
+}
+
 // Utility functions
 export const getCurrentUser = async () => {
   try {
+    if (!isSupabaseConfigured()) {
+      console.log("Supabase not configured")
+      return null
+    }
+
     const {
       data: { user },
       error,
@@ -99,6 +139,10 @@ export const getCurrentUser = async () => {
 
 export const getCommunityMembers = async (communityId: string) => {
   try {
+    if (!isSupabaseConfigured()) {
+      throw new Error("Supabase not configured")
+    }
+
     const { data, error } = await supabase.from("community_members").select("*").eq("community_id", communityId)
 
     if (error) {
@@ -114,6 +158,10 @@ export const getCommunityMembers = async (communityId: string) => {
 
 export const getUserCommunities = async (userId: string) => {
   try {
+    if (!isSupabaseConfigured()) {
+      throw new Error("Supabase not configured")
+    }
+
     const { data, error } = await supabase
       .from("community_members")
       .select(`
@@ -135,6 +183,10 @@ export const getUserCommunities = async (userId: string) => {
 
 export const joinCommunity = async (userId: string, communityId: string) => {
   try {
+    if (!isSupabaseConfigured()) {
+      throw new Error("Supabase not configured")
+    }
+
     console.log(`Attempting to join community ${communityId} for user ${userId}`)
 
     // Validate inputs
@@ -152,12 +204,7 @@ export const joinCommunity = async (userId: string, communityId: string) => {
 
     if (checkError) {
       console.error("Error checking existing membership:", checkError)
-      // Don't throw empty objects
-      if (checkError && Object.keys(checkError).length > 0) {
-        throw checkError
-      } else {
-        throw new Error("Failed to check existing membership")
-      }
+      throw checkError
     }
 
     if (existingMember) {
@@ -177,45 +224,23 @@ export const joinCommunity = async (userId: string, communityId: string) => {
 
     if (error) {
       console.error("Error inserting membership:", error)
-      // Don't throw empty objects
-      if (error && Object.keys(error).length > 0) {
-        throw error
-      } else {
-        throw new Error("Failed to insert membership")
-      }
+      throw error
     }
 
     console.log("Successfully joined community:", data)
     return data
   } catch (error) {
     console.error("joinCommunity error:", error)
-    let errorMessage = "Failed to join community - an unknown error occurred."
-
-    if (error instanceof Error) {
-      errorMessage = error.message
-    } else if (error && typeof error === "object") {
-      const errorObj = error as any
-      if (errorObj.message && typeof errorObj.message === "string") {
-        errorMessage = errorObj.message
-      } else if (errorObj.details && typeof errorObj.details === "string") {
-        errorMessage = errorObj.details
-      } else if (errorObj.error_description && typeof errorObj.error_description === "string") {
-        errorMessage = errorObj.error_description
-      } else if (errorObj.error && typeof errorObj.error === "string") {
-        errorMessage = errorObj.error
-      } else if (Object.keys(errorObj).length === 0) {
-        errorMessage = "Failed to join community - empty error object received."
-      }
-    } else if (typeof error === "string") {
-      errorMessage = error
-    }
-
-    throw new Error(errorMessage)
+    throw error
   }
 }
 
 export const leaveCommunity = async (userId: string, communityId: string) => {
   try {
+    if (!isSupabaseConfigured()) {
+      throw new Error("Supabase not configured")
+    }
+
     console.log(`Attempting to leave community ${communityId} for user ${userId}`)
 
     if (!userId || !communityId) {
@@ -230,43 +255,22 @@ export const leaveCommunity = async (userId: string, communityId: string) => {
 
     if (error) {
       console.error("Error leaving community:", error)
-      if (error && Object.keys(error).length > 0) {
-        throw error
-      } else {
-        throw new Error("Failed to leave community")
-      }
+      throw error
     }
 
     console.log("Successfully left community")
   } catch (error) {
     console.error("leaveCommunity error:", error)
-    let errorMessage = "Failed to leave community - an unknown error occurred."
-
-    if (error instanceof Error) {
-      errorMessage = error.message
-    } else if (error && typeof error === "object") {
-      const errorObj = error as any
-      if (errorObj.message && typeof errorObj.message === "string") {
-        errorMessage = errorObj.message
-      } else if (errorObj.details && typeof errorObj.details === "string") {
-        errorMessage = errorObj.details
-      } else if (errorObj.error_description && typeof errorObj.error_description === "string") {
-        errorMessage = errorObj.error_description
-      } else if (errorObj.error && typeof errorObj.error === "string") {
-        errorMessage = errorObj.error
-      } else if (Object.keys(errorObj).length === 0) {
-        errorMessage = "Failed to leave community - empty error object received."
-      }
-    } else if (typeof error === "string") {
-      errorMessage = error
-    }
-
-    throw new Error(errorMessage)
+    throw error
   }
 }
 
 export const toggleStarCommunity = async (userId: string, communityId: string, isStarred: boolean) => {
   try {
+    if (!isSupabaseConfigured()) {
+      throw new Error("Supabase not configured")
+    }
+
     console.log(`Toggling star for community ${communityId} to ${isStarred}`)
 
     if (!userId || !communityId) {
@@ -281,38 +285,13 @@ export const toggleStarCommunity = async (userId: string, communityId: string, i
 
     if (error) {
       console.error("Error toggling star:", error)
-      if (error && Object.keys(error).length > 0) {
-        throw error
-      } else {
-        throw new Error("Failed to toggle star")
-      }
+      throw error
     }
 
     console.log("Successfully toggled star")
   } catch (error) {
     console.error("toggleStarCommunity error:", error)
-    let errorMessage = "Failed to toggle star - an unknown error occurred."
-
-    if (error instanceof Error) {
-      errorMessage = error.message
-    } else if (error && typeof error === "object") {
-      const errorObj = error as any
-      if (errorObj.message && typeof errorObj.message === "string") {
-        errorMessage = errorObj.message
-      } else if (errorObj.details && typeof errorObj.details === "string") {
-        errorMessage = errorObj.details
-      } else if (errorObj.error_description && typeof errorObj.error_description === "string") {
-        errorMessage = errorObj.error_description
-      } else if (errorObj.error && typeof errorObj.error === "string") {
-        errorMessage = errorObj.error
-      } else if (Object.keys(errorObj).length === 0) {
-        errorMessage = "Failed to toggle star - empty error object received."
-      }
-    } else if (typeof error === "string") {
-      errorMessage = error
-    }
-
-    throw new Error(errorMessage)
+    throw error
   }
 }
 
@@ -322,7 +301,7 @@ export const checkDatabaseSetup = async (): Promise<boolean> => {
 
   try {
     // Check environment variables first
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    if (!isSupabaseConfigured()) {
       console.log("❌ Missing Supabase environment variables")
       return false
     }

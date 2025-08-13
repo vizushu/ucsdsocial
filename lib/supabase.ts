@@ -285,6 +285,10 @@ const createDummyClient = () => {
           return { unsubscribe: () => {} }
         },
       }),
+      send: () => {
+        console.log(`🎭 Demo channel send: ${name}`)
+        return Promise.resolve()
+      },
     }),
   }
 }
@@ -329,12 +333,24 @@ export interface Community {
   created_by: string
 }
 
+export interface ChannelCategory {
+  id: string
+  name: string
+  community_id: string
+  position: number
+  created_at: string
+  created_by: string
+}
+
 export interface Channel {
   id: string
   name: string
   type: "text" | "voice" | "link"
   community_id: string
+  category_id?: string
+  topic?: string
   href?: string
+  position: number
   created_at: string
 }
 

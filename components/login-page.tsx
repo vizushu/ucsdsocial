@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
@@ -9,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -70,11 +70,16 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-ucsd-navy to-ucsd-blue p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-ucsd-navy to-ucsd-blue dark:from-gray-900 dark:to-gray-800 p-4">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold text-ucsd-navy">Welcome to UCSD Social</CardTitle>
-          <CardDescription>Connect with fellow Tritons and join amazing communities</CardDescription>
+          <CardTitle className="text-2xl font-bold text-ucsd-navy dark:text-white">Welcome to UCSD Social</CardTitle>
+          <CardDescription className="dark:text-gray-300">
+            Connect with fellow Tritons and join amazing communities
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <form onSubmit={handleSubmit} className="space-y-4">

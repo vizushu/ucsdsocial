@@ -8,6 +8,7 @@ import ChatChannel from "@/components/chat-channel"
 import ItineraryChannel from "@/components/itinerary-channel"
 import ChecklistChannel from "@/components/checklist-channel"
 import type { User, Community, Channel } from "@/app/page"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 interface CommunityPageProps {
   user: User
@@ -151,15 +152,16 @@ export default function CommunityPage({ user, community, onBack, onLogout }: Com
                 <span className="text-white font-bold text-sm">{user.avatar}</span>
               </div>
               <div className="flex-1">
-                <p className="font-medium text-ucsd-navy text-sm">{user.name}</p>
-                <p className="text-xs text-gray-500">{user.email}</p>
+                <p className="font-medium text-ucsd-navy dark:text-white text-sm">{user.name}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{user.email}</p>
               </div>
+              <ThemeToggle />
             </div>
             <Button
               onClick={onBack}
               variant="outline"
               size="sm"
-              className="w-full text-ucsd-navy border-ucsd-navy hover:bg-ucsd-navy hover:text-white bg-transparent"
+              className="w-full text-ucsd-navy dark:text-white border-ucsd-navy dark:border-gray-600 hover:bg-ucsd-navy hover:text-white dark:hover:bg-gray-700 bg-transparent"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Communities

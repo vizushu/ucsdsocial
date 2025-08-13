@@ -153,11 +153,11 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-ucsd-gold border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading UCSD Social...</p>
-          {isDemo && <p className="text-sm text-gray-500 mt-2">Running in demo mode</p>}
+          <p className="text-gray-600 dark:text-gray-300">Loading UCSD Social...</p>
+          {isDemo && <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Running in demo mode</p>}
         </div>
       </div>
     )
@@ -181,7 +181,7 @@ export default function App() {
 
       {/* Demo Mode Indicator */}
       {isDemo && (
-        <div className="fixed bottom-4 right-4 bg-ucsd-gold text-ucsd-navy px-3 py-2 rounded-lg text-sm font-medium shadow-lg">
+        <div className="fixed bottom-4 right-4 bg-ucsd-gold text-ucsd-navy px-3 py-2 rounded-lg text-sm font-medium shadow-lg dark:shadow-gray-800">
           🎭 Demo Mode
         </div>
       )}

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Search, Star, Users, Plus, LogOut } from "lucide-react"
 import { toast } from "sonner"
 import type { User, Community } from "@/app/page"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 interface CommunitiesPageProps {
   user: User
@@ -236,9 +237,12 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
               </Badge>
             )}
           </div>
-          <Button variant="ghost" size="sm" onClick={onLogout}>
-            <LogOut className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center space-x-2">
+            <ThemeToggle />
+            <Button variant="ghost" size="sm" onClick={onLogout}>
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
       {/* Search */}

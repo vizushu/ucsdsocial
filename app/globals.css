@@ -73,14 +73,26 @@
 .text-ucsd-navy {
   color: #182b49;
 }
+.dark .text-ucsd-navy {
+  color: #ffffff;
+}
 .text-ucsd-gold {
   color: #ffcd00;
 }
 .text-ucsd-blue {
   color: #00629b;
 }
+.dark .text-ucsd-blue {
+  color: #4a9eff;
+}
+.text-ucsd-aqua {
+  color: #00c6d7;
+}
 .bg-ucsd-navy {
   background-color: #182b49;
+}
+.dark .bg-ucsd-navy {
+  background-color: #1a1a1a;
 }
 .bg-ucsd-gold {
   background-color: #ffcd00;
@@ -93,6 +105,9 @@
 }
 .hover\:bg-ucsd-gold:hover {
   background-color: #ffcd00;
+}
+.dark .hover\:bg-ucsd-navy:hover {
+  background-color: #2a2a2a;
 }
 .hover\:bg-ucsd-navy:hover {
   background-color: #182b49;

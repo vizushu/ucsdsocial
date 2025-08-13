@@ -18,7 +18,7 @@ import {
   Users,
   Plus,
 } from "lucide-react"
-import { supabase, joinCommunity, leaveCommunity, toggleStarCommunity, checkDatabaseSetup } from "@/lib/supabase"
+import { supabase, joinCommunity, leaveCommunity, toggleStarCommunity } from "@/lib/supabase"
 import { handleSupabaseError } from "@/lib/error-handler"
 import type { User as UserType, Community } from "@/app/page"
 import { toast } from "sonner"
@@ -104,19 +104,38 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
       setLoading(true)
       console.log("Loading communities...")
 
-      // First check if database is set up
-      const isDatabaseSetup = await checkDatabaseSetup()
-      console.log("Database setup status:", isDatabaseSetup)
+      // TEMPORARY: Force check environment variables
+      const hasSupabaseUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL
+      const hasSupabaseKey = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-      if (!isDatabaseSetup) {
-        console.log("Database not set up, using fallback data")
+      console.log("Environment check:", { hasSupabaseUrl, hasSupabaseKey })
+
+      if (!hasSupabaseUrl || !hasSupabaseKey) {
+        console.log("❌ Missing Supabase environment variables - using fallback")
         setCommunities(fallbackCommunities)
         setUsingFallback(true)
         return
       }
 
-      // Database is set up, try to load real data
-      setUsingFallback(false)
+      // Try database connection
+      try {
+        const { data: testData, error: testError } = await supabase.from("communities").select("id").limit(1)
+
+        if (testError) {
+          console.log("❌ Database connection failed:", testError.message)
+          setCommunities(fallbackCommunities)
+          setUsingFallback(true)
+          return
+        }
+
+        console.log("✅ Database connection successful")
+        setUsingFallback(false)
+      } catch (connectionError) {
+        console.log("❌ Database connection error:", connectionError)
+        setCommunities(fallbackCommunities)
+        setUsingFallback(true)
+        return
+      }
 
       // Get all communities
       const { data: allCommunities, error: communitiesError } = await supabase
@@ -126,14 +145,9 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
 
       if (communitiesError) {
         console.error("Error loading communities:", communitiesError)
-        // If it's a table not found error, switch to fallback
-        if (communitiesError.code === "42P01" || communitiesError.message?.includes("does not exist")) {
-          console.log("Communities table not found, switching to fallback")
-          setCommunities(fallbackCommunities)
-          setUsingFallback(true)
-          return
-        }
-        throw communitiesError
+        setCommunities(fallbackCommunities)
+        setUsingFallback(true)
+        return
       }
 
       // Get user's memberships
@@ -144,14 +158,9 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
 
       if (membershipsError) {
         console.error("Error loading memberships:", membershipsError)
-        // If it's a table not found error, switch to fallback
-        if (membershipsError.code === "42P01" || membershipsError.message?.includes("does not exist")) {
-          console.log("Community members table not found, switching to fallback")
-          setCommunities(fallbackCommunities)
-          setUsingFallback(true)
-          return
-        }
-        throw membershipsError
+        setCommunities(fallbackCommunities)
+        setUsingFallback(true)
+        return
       }
 
       // Get member counts for each community
@@ -176,20 +185,6 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
       console.log("Successfully loaded communities:", communitiesWithData.length)
     } catch (error) {
       console.error("Error in loadCommunities:", error)
-
-      // Check if it's a database-related error
-      if (error && typeof error === "object") {
-        const errorObj = error as any
-        if (errorObj.code === "42P01" || errorObj.message?.includes("does not exist")) {
-          console.log("Database tables not found, using fallback data")
-          setCommunities(fallbackCommunities)
-          setUsingFallback(true)
-          return
-        }
-      }
-
-      handleSupabaseError(error, "loading communities")
-      // Fall back to static data if there's any error
       setCommunities(fallbackCommunities)
       setUsingFallback(true)
     } finally {
@@ -227,24 +222,6 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
       return
     }
 
-    // Check database setup again before attempting join
-    try {
-      const isDatabaseSetup = await checkDatabaseSetup()
-      if (!isDatabaseSetup) {
-        console.log("Database not set up, switching to fallback mode")
-        setUsingFallback(true)
-        setCommunities(fallbackCommunities)
-        toast.error("Database not configured. Using demo mode.")
-        return
-      }
-    } catch (dbCheckError) {
-      console.error("Database check failed:", dbCheckError)
-      setUsingFallback(true)
-      setCommunities(fallbackCommunities)
-      toast.error("Database check failed. Using demo mode.")
-      return
-    }
-
     try {
       setJoiningCommunity(communityId)
       console.log("Calling joinCommunity function...")
@@ -255,22 +232,8 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
       await loadCommunities() // Refresh the list
       toast.success("Successfully joined community!")
     } catch (error) {
-      console.error("Join community error details:", {
-        error,
-        type: typeof error,
-        keys: error && typeof error === "object" ? Object.keys(error) : "N/A",
-        constructor: error?.constructor?.name,
-      })
-
-      // If we get an empty object or meaningless error, switch to fallback mode
-      if (!error || (typeof error === "object" && Object.keys(error).length === 0)) {
-        console.log("Empty error detected, switching to fallback mode")
-        setUsingFallback(true)
-        setCommunities(fallbackCommunities)
-        toast.error("Database error. Switching to demo mode.")
-      } else {
-        handleSupabaseError(error, "joining community")
-      }
+      console.error("Join community error details:", error)
+      handleSupabaseError(error, "joining community")
     } finally {
       setJoiningCommunity(null)
     }
@@ -396,17 +359,18 @@ export default function CommunitiesPage({ user, onSelectCommunity, onLogout }: C
               <span className="text-sm font-bold">!</span>
             </div>
             <div className="flex-1">
-              <p className="font-semibold text-sm mb-1">Database Setup Required</p>
+              <p className="font-semibold text-sm mb-1">Supabase Integration Required</p>
               <p className="text-sm mb-2">
-                The Supabase database hasn't been configured yet. You're currently viewing demo data.
+                Your Supabase environment variables aren't configured. You're currently viewing demo data.
               </p>
               <div className="text-xs space-y-1">
                 <p>
-                  <strong>To set up your database:</strong>
+                  <strong>To connect to your database:</strong>
                 </p>
                 <ol className="list-decimal list-inside space-y-0.5 ml-2">
-                  <li>Add the Supabase integration in v0</li>
-                  <li>Run the SQL scripts in the scripts folder</li>
+                  <li>Add the Supabase integration in your v0 project settings</li>
+                  <li>Or manually set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY</li>
+                  <li>Run the SQL scripts to create your database tables</li>
                   <li>Refresh this page</li>
                 </ol>
               </div>

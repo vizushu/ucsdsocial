@@ -16,6 +16,31 @@ export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false)
   const [loading, setLoading] = useState(false)
 
+  const handleDemoLogin = (email: string) => {
+    const mockUser = {
+      id: "demo-user-" + Math.random().toString(36).substr(2, 9),
+      email: email,
+      user_metadata: {
+        name: email
+          .split("@")[0]
+          .replace(/[._]/g, " ")
+          .replace(/\b\w/g, (l) => l.toUpperCase()),
+      },
+    }
+
+    // Store demo user in localStorage for persistence
+    localStorage.setItem("demo_user", JSON.stringify(mockUser))
+
+    // Trigger a custom event to notify other components
+    window.dispatchEvent(
+      new CustomEvent("demo_auth_change", {
+        detail: { user: mockUser, event: "SIGNED_IN" },
+      }),
+    )
+
+    toast.success(isSignUp ? "Demo account created! Welcome!" : "Demo login successful!")
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -25,102 +50,59 @@ export default function LoginPage() {
         throw new Error("Please use your UCSD email address")
       }
 
-      // Check if we're in demo mode or if Supabase is not configured
+      // Check if we're in demo mode BEFORE trying to call Supabase
       if (isDemoMode() || !supabase) {
         console.log("Demo mode: Simulating authentication")
-
-        // Simulate successful login for demo
-        const mockUser = {
-          id: "demo-user-" + Math.random().toString(36).substr(2, 9),
-          email: email,
-          user_metadata: {
-            name: email
-              .split("@")[0]
-              .replace(/[._]/g, " ")
-              .replace(/\b\w/g, (l) => l.toUpperCase()),
-          },
-        }
-
-        // Store demo user in localStorage for persistence
-        localStorage.setItem("demo_user", JSON.stringify(mockUser))
-
-        // Trigger a custom event to notify other components
-        window.dispatchEvent(
-          new CustomEvent("demo_auth_change", {
-            detail: { user: mockUser, event: "SIGNED_IN" },
-          }),
-        )
-
-        toast.success(isSignUp ? "Demo account created! Welcome!" : "Demo login successful!")
+        handleDemoLogin(email)
         setLoading(false)
         return
       }
 
-      // Real Supabase authentication
-      if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              name: email
-                .split("@")[0]
-                .replace(/[._]/g, " ")
-                .replace(/\b\w/g, (l) => l.toUpperCase()),
+      // Only attempt real Supabase authentication if properly configured
+      try {
+        if (isSignUp) {
+          const { error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              data: {
+                name: email
+                  .split("@")[0]
+                  .replace(/[._]/g, " ")
+                  .replace(/\b\w/g, (l) => l.toUpperCase()),
+              },
             },
-          },
-        })
-        if (error) throw error
-        toast.success("Check your email for confirmation link!")
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
-        if (error) throw error
-        toast.success("Welcome back!")
+          })
+          if (error) throw error
+          toast.success("Check your email for confirmation link!")
+        } else {
+          const { error } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          })
+          if (error) throw error
+          toast.success("Welcome back!")
+        }
+      } catch (authError: any) {
+        // If Supabase call fails, fall back to demo mode
+        console.log("Supabase authentication failed, using demo mode:", authError.message)
+        handleDemoLogin(email)
       }
     } catch (error: any) {
       console.error("Authentication error:", error)
-
-      // If there's a network error, fall back to demo mode
-      if (error.message?.includes("fetch") || error.message?.includes("network")) {
-        console.log("Network error detected, falling back to demo mode")
-
-        const mockUser = {
-          id: "demo-user-" + Math.random().toString(36).substr(2, 9),
-          email: email,
-          user_metadata: {
-            name: email
-              .split("@")[0]
-              .replace(/[._]/g, " ")
-              .replace(/\b\w/g, (l) => l.toUpperCase()),
-          },
-        }
-
-        localStorage.setItem("demo_user", JSON.stringify(mockUser))
-        window.dispatchEvent(
-          new CustomEvent("demo_auth_change", {
-            detail: { user: mockUser, event: "SIGNED_IN" },
-          }),
-        )
-
-        toast.success("Connected in demo mode!")
-      } else {
-        toast.error(error.message || "Authentication failed")
-      }
+      toast.error(error.message || "Authentication failed")
     } finally {
       setLoading(false)
     }
   }
 
   const handleGoogleSignIn = async () => {
-    try {
-      if (isDemoMode() || !supabase) {
-        toast.error("Demo mode: OAuth not available. Use any @ucsd.edu email instead.")
-        return
-      }
+    if (isDemoMode() || !supabase) {
+      toast.error("Demo mode: OAuth not available. Use any @ucsd.edu email instead.")
+      return
+    }
 
+    try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -130,7 +112,7 @@ export default function LoginPage() {
       if (error) throw error
     } catch (error: any) {
       console.error("OAuth error:", error)
-      toast.error("OAuth not available in demo mode. Use email/password instead.")
+      toast.error("OAuth not available. Use email/password instead.")
     }
   }
 
@@ -145,8 +127,8 @@ export default function LoginPage() {
           <CardDescription className="dark:text-gray-300">
             Connect with fellow Tritons and join amazing communities
             {isDemoMode() && (
-              <div className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                Running in demo mode - use any @ucsd.edu email
+              <div className="mt-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-md p-2">
+                🎮 Running in demo mode - use any @ucsd.edu email
               </div>
             )}
           </CardDescription>
@@ -173,7 +155,9 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                minLength={6}
               />
+              {isDemoMode() && <p className="text-xs text-muted-foreground">Any password works in demo mode</p>}
             </div>
             <Button
               type="submit"
@@ -184,24 +168,28 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
-            </div>
-          </div>
+          {!isDemoMode() && (
+            <>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+                </div>
+              </div>
 
-          <Button variant="outline" className="w-full bg-transparent" onClick={handleGoogleSignIn}>
-            Continue with Google
-          </Button>
+              <Button variant="outline" className="w-full bg-transparent" onClick={handleGoogleSignIn}>
+                Continue with Google
+              </Button>
+            </>
+          )}
 
           <div className="text-center">
             <button
               type="button"
               onClick={() => setIsSignUp(!isSignUp)}
-              className="text-sm text-ucsd-blue hover:underline"
+              className="text-sm text-ucsd-blue hover:underline dark:text-ucsd-gold"
             >
               {isSignUp ? "Already have an account? Sign in" : "Don't have an account? Sign up"}
             </button>

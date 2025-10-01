@@ -31,7 +31,7 @@ export default function Home() {
   useEffect(() => {
     // Check for demo mode first
     if (isDemoMode() || !supabase) {
-      console.log("Running in demo mode")
+      console.log("🎮 Running in demo mode")
 
       // Check for stored demo user
       const storedUser = localStorage.getItem("demo_user")
@@ -63,7 +63,7 @@ export default function Home() {
           })
         } else if (authEvent === "SIGNED_OUT") {
           setUser(null)
-          localStorage.removeItem("demo_user")
+          setSelectedCommunity(null)
         }
       }
 
@@ -158,8 +158,11 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-ucsd-navy to-ucsd-blue">
-        <div className="text-white text-xl">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-ucsd-navy to-ucsd-blue dark:from-gray-900 dark:to-gray-800">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-ucsd-gold border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-white text-lg">Loading UCSD Social...</p>
+        </div>
       </div>
     )
   }

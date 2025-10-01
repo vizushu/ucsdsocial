@@ -5,7 +5,7 @@ import { supabase, isDemoMode, demoData } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Users, Star, Plus, Settings, LogOut } from "lucide-react"
+import { Users, Plus, LogOut } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import type { User, Community } from "@/app/page"
 
@@ -17,7 +17,6 @@ interface CommunitiesPageProps {
 
 export default function CommunitiesPage({ user, onCommunitySelect, onLogout }: CommunitiesPageProps) {
   const [communities, setCommunities] = useState<Community[]>([])
-  const [starredCommunities, setStarredCommunities] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -26,225 +25,105 @@ export default function CommunitiesPage({ user, onCommunitySelect, onLogout }: C
 
   const loadCommunities = async () => {
     try {
-      if (isDemoMode() || !supabase) {
+      if (isDemoMode()) {
+        // Use demo data
         console.log("Loading demo communities")
-        setCommunities(demoData.communities)
-        setStarredCommunities(new Set(["demo-yosemite"]))
+        setCommunities(
+          demoData.communities.map((c) => ({
+            ...c,
+            icon: c.name.charAt(0).toUpperCase(),
+          })),
+        )
         setLoading(false)
         return
       }
 
-      // Load real communities from Supabase
-      const { data: communitiesData, error: communitiesError } = await supabase
-        .from("communities")
-        .select("*")
-        .order("created_at", { ascending: false })
+      // Load from Supabase
+      const { data, error } = await supabase!.from("communities").select("*").order("created_at", { ascending: false })
 
-      if (communitiesError) {
-        console.error("Error loading communities:", communitiesError)
-        // Fallback to demo data
-        setCommunities(demoData.communities)
-        setStarredCommunities(new Set(["demo-yosemite"]))
-        setLoading(false)
-        return
-      }
+      if (error) throw error
 
-      setCommunities(communitiesData || [])
-
-      // Load starred communities
-      const { data: starredData, error: starredError } = await supabase
-        .from("community_members")
-        .select("community_id")
-        .eq("user_id", user.id)
-        .eq("is_starred", true)
-
-      if (!starredError && starredData) {
-        setStarredCommunities(new Set(starredData.map((item) => item.community_id)))
-      }
+      setCommunities(
+        (data || []).map((c) => ({
+          ...c,
+          icon: c.name.charAt(0).toUpperCase(),
+        })),
+      )
     } catch (error) {
-      console.error("Error in loadCommunities:", error)
-      // Fallback to demo data
-      setCommunities(demoData.communities)
-      setStarredCommunities(new Set(["demo-yosemite"]))
+      console.error("Error loading communities:", error)
+      // Fallback to demo data on error
+      setCommunities(
+        demoData.communities.map((c) => ({
+          ...c,
+          icon: c.name.charAt(0).toUpperCase(),
+        })),
+      )
     } finally {
       setLoading(false)
     }
   }
 
-  const toggleStar = async (communityId: string) => {
-    const isStarred = starredCommunities.has(communityId)
-
-    if (isDemoMode() || !supabase) {
-      // Demo mode - just update local state
-      const newStarred = new Set(starredCommunities)
-      if (isStarred) {
-        newStarred.delete(communityId)
-      } else {
-        newStarred.add(communityId)
-      }
-      setStarredCommunities(newStarred)
-      return
-    }
-
-    try {
-      if (isStarred) {
-        await supabase
-          .from("community_members")
-          .update({ is_starred: false })
-          .eq("user_id", user.id)
-          .eq("community_id", communityId)
-      } else {
-        await supabase.from("community_members").upsert({
-          user_id: user.id,
-          community_id: communityId,
-          is_starred: true,
-        })
-      }
-
-      const newStarred = new Set(starredCommunities)
-      if (isStarred) {
-        newStarred.delete(communityId)
-      } else {
-        newStarred.add(communityId)
-      }
-      setStarredCommunities(newStarred)
-    } catch (error) {
-      console.error("Error toggling star:", error)
-    }
-  }
-
-  const starredCommunitiesList = communities.filter((c) => starredCommunities.has(c.id))
-  const otherCommunities = communities.filter((c) => !starredCommunities.has(c.id))
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Loading communities...</div>
-      </div>
-    )
-  }
-
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <h1 className="text-2xl font-bold text-ucsd-navy dark:text-white">UCSD Social</h1>
-            {isDemoMode() && (
-              <Badge variant="secondary" className="text-xs">
-                Demo Mode
-              </Badge>
-            )}
+    <div className="min-h-screen bg-gradient-to-br from-ucsd-navy to-ucsd-blue dark:from-gray-900 dark:to-gray-800">
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">UCSD Social Communities</h1>
+            <p className="text-gray-200 dark:text-gray-300">
+              Welcome back, {user.name}! {isDemoMode() && "🎮 Demo Mode"}
+            </p>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex gap-2">
             <ThemeToggle />
-            <Button variant="ghost" size="sm">
-              <Settings className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={onLogout}>
+            <Button variant="outline" size="icon" onClick={onLogout} title="Logout">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
         </div>
-      </header>
 
-      <div className="container mx-auto px-4 py-8">
-        {/* Welcome Section */}
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold mb-2">Welcome back, {user.name}!</h2>
-          <p className="text-muted-foreground">Connect with fellow Tritons and join amazing communities</p>
-        </div>
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="w-8 h-8 border-2 border-ucsd-gold border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-white">Loading communities...</p>
+          </div>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {communities.map((community) => (
+              <Card
+                key={community.id}
+                className="cursor-pointer hover:shadow-lg transition-shadow bg-white dark:bg-gray-800"
+                onClick={() => onCommunitySelect(community)}
+              >
+                <CardHeader>
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-ucsd-gold flex items-center justify-center text-ucsd-navy text-xl font-bold">
+                      {community.icon}
+                    </div>
+                    <div>
+                      <CardTitle className="text-ucsd-navy dark:text-white">{community.name}</CardTitle>
+                      <CardDescription className="dark:text-gray-300">{community.description}</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Badge variant="secondary" className="bg-ucsd-blue/10 text-ucsd-blue dark:bg-ucsd-gold/10">
+                    <Users className="w-3 h-3 mr-1" />
+                    {community.member_count} members
+                  </Badge>
+                </CardContent>
+              </Card>
+            ))}
 
-        {/* Starred Communities */}
-        {starredCommunitiesList.length > 0 && (
-          <div className="mb-8">
-            <h3 className="text-xl font-semibold mb-4 flex items-center">
-              <Star className="h-5 w-5 mr-2 text-yellow-500" />
-              Starred Communities
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {starredCommunitiesList.map((community) => (
-                <CommunityCard
-                  key={community.id}
-                  community={community}
-                  isStarred={true}
-                  onToggleStar={toggleStar}
-                  onSelect={onCommunitySelect}
-                />
-              ))}
-            </div>
+            <Card className="border-dashed border-2 cursor-pointer hover:border-ucsd-gold transition-colors bg-white/50 dark:bg-gray-800/50">
+              <CardHeader className="text-center py-12">
+                <Plus className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                <CardTitle className="text-gray-600 dark:text-gray-300">Create New Community</CardTitle>
+                <CardDescription className="dark:text-gray-400">Start your own group</CardDescription>
+              </CardHeader>
+            </Card>
           </div>
         )}
-
-        {/* All Communities */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-semibold">All Communities</h3>
-            <Button size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              Create Community
-            </Button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {otherCommunities.map((community) => (
-              <CommunityCard
-                key={community.id}
-                community={community}
-                isStarred={false}
-                onToggleStar={toggleStar}
-                onSelect={onCommunitySelect}
-              />
-            ))}
-          </div>
-        </div>
       </div>
     </div>
-  )
-}
-
-interface CommunityCardProps {
-  community: Community
-  isStarred: boolean
-  onToggleStar: (id: string) => void
-  onSelect: (community: Community) => void
-}
-
-function CommunityCard({ community, isStarred, onToggleStar, onSelect }: CommunityCardProps) {
-  return (
-    <Card className="cursor-pointer hover:shadow-lg transition-shadow">
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 bg-ucsd-gold rounded-lg flex items-center justify-center text-ucsd-navy font-bold text-lg">
-              {community.name.charAt(0)}
-            </div>
-            <div>
-              <CardTitle className="text-lg">{community.name}</CardTitle>
-              <div className="flex items-center text-sm text-muted-foreground mt-1">
-                <Users className="h-4 w-4 mr-1" />
-                {community.member_count} members
-              </div>
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation()
-              onToggleStar(community.id)
-            }}
-          >
-            <Star className={`h-4 w-4 ${isStarred ? "fill-yellow-500 text-yellow-500" : "text-gray-400"}`} />
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <CardDescription className="mb-4">{community.description}</CardDescription>
-        <Button className="w-full bg-ucsd-navy hover:bg-ucsd-navy/90 text-white" onClick={() => onSelect(community)}>
-          Join Community
-        </Button>
-      </CardContent>
-    </Card>
   )
 }

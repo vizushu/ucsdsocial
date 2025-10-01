@@ -5,6 +5,7 @@ import { supabase, isDemoMode } from "@/lib/supabase"
 import LoginPage from "@/components/login-page"
 import CommunitiesPage from "@/components/communities-page"
 import CommunityPage from "@/components/community-page"
+import { toast } from "react-toastify"
 
 export interface User {
   id: string
@@ -29,59 +30,62 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Check for demo mode first
-    if (isDemoMode() || !supabase) {
-      console.log("🎮 Running in demo mode")
+    const initAuth = async () => {
+      console.log("Initializing auth, demo mode:", isDemoMode())
 
-      // Check for stored demo user
-      const storedUser = localStorage.getItem("demo_user")
-      if (storedUser) {
-        try {
-          const demoUser = JSON.parse(storedUser)
-          setUser({
-            id: demoUser.id,
-            name: demoUser.user_metadata?.name || demoUser.email.split("@")[0],
-            email: demoUser.email,
-            avatar: demoUser.user_metadata?.name?.charAt(0) || demoUser.email.charAt(0).toUpperCase(),
-          })
-        } catch (error) {
-          console.error("Error parsing stored demo user:", error)
-          localStorage.removeItem("demo_user")
+      // Check for demo mode first
+      if (isDemoMode()) {
+        console.log("🎮 Running in demo mode")
+
+        // Check for stored demo user
+        const storedUser = localStorage.getItem("demo_user")
+        if (storedUser) {
+          try {
+            const demoUser = JSON.parse(storedUser)
+            setUser({
+              id: demoUser.id,
+              name: demoUser.user_metadata?.name || demoUser.email.split("@")[0],
+              email: demoUser.email,
+              avatar: demoUser.user_metadata?.name?.charAt(0) || demoUser.email.charAt(0).toUpperCase(),
+            })
+          } catch (error) {
+            console.error("Error parsing stored demo user:", error)
+            localStorage.removeItem("demo_user")
+          }
+        }
+
+        // Listen for demo auth changes
+        const handleDemoAuth = (event: any) => {
+          const { user: demoUser, event: authEvent } = event.detail
+
+          if (authEvent === "SIGNED_IN" && demoUser) {
+            setUser({
+              id: demoUser.id,
+              name: demoUser.user_metadata?.name || demoUser.email.split("@")[0],
+              email: demoUser.email,
+              avatar: demoUser.user_metadata?.name?.charAt(0) || demoUser.email.charAt(0).toUpperCase(),
+            })
+          } else if (authEvent === "SIGNED_OUT") {
+            setUser(null)
+            setSelectedCommunity(null)
+          }
+        }
+
+        window.addEventListener("demo_auth_change", handleDemoAuth)
+        setLoading(false)
+
+        return () => {
+          window.removeEventListener("demo_auth_change", handleDemoAuth)
         }
       }
 
-      // Listen for demo auth changes
-      const handleDemoAuth = (event: any) => {
-        const { user: demoUser, event: authEvent } = event.detail
-
-        if (authEvent === "SIGNED_IN" && demoUser) {
-          setUser({
-            id: demoUser.id,
-            name: demoUser.user_metadata?.name || demoUser.email.split("@")[0],
-            email: demoUser.email,
-            avatar: demoUser.user_metadata?.name?.charAt(0) || demoUser.email.charAt(0).toUpperCase(),
-          })
-        } else if (authEvent === "SIGNED_OUT") {
-          setUser(null)
-          setSelectedCommunity(null)
-        }
-      }
-
-      window.addEventListener("demo_auth_change", handleDemoAuth)
-      setLoading(false)
-
-      return () => {
-        window.removeEventListener("demo_auth_change", handleDemoAuth)
-      }
-    }
-
-    // Real Supabase authentication
-    const initializeAuth = async () => {
+      // Real Supabase authentication
       try {
+        console.log("Attempting real Supabase authentication...")
         const {
           data: { session },
           error,
-        } = await supabase.auth.getSession()
+        } = await supabase!.auth.getSession()
 
         if (error) {
           console.error("Session error:", error)
@@ -97,42 +101,43 @@ export default function Home() {
             avatar: session.user.user_metadata?.name?.charAt(0) || session.user.email?.charAt(0).toUpperCase() || "U",
           })
         }
+
+        // Listen for auth changes
+        const {
+          data: { subscription },
+        } = supabase!.auth.onAuthStateChange(async (event, session) => {
+          console.log("Auth state changed:", event, session?.user?.email)
+
+          if (event === "SIGNED_IN" && session?.user) {
+            setUser({
+              id: session.user.id,
+              name: session.user.user_metadata?.name || session.user.email?.split("@")[0] || "User",
+              email: session.user.email || "",
+              avatar: session.user.user_metadata?.name?.charAt(0) || session.user.email?.charAt(0).toUpperCase() || "U",
+            })
+          } else if (event === "SIGNED_OUT") {
+            setUser(null)
+            setSelectedCommunity(null)
+          }
+        })
+
+        setLoading(false)
+
+        return () => {
+          subscription.unsubscribe()
+        }
       } catch (error) {
         console.error("Auth initialization error:", error)
-      } finally {
         setLoading(false)
       }
     }
 
-    initializeAuth()
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("Auth state changed:", event, session?.user?.email)
-
-      if (event === "SIGNED_IN" && session?.user) {
-        setUser({
-          id: session.user.id,
-          name: session.user.user_metadata?.name || session.user.email?.split("@")[0] || "User",
-          email: session.user.email || "",
-          avatar: session.user.user_metadata?.name?.charAt(0) || session.user.email?.charAt(0).toUpperCase() || "U",
-        })
-      } else if (event === "SIGNED_OUT") {
-        setUser(null)
-        setSelectedCommunity(null)
-      }
-    })
-
-    return () => {
-      subscription.unsubscribe()
-    }
+    initAuth()
   }, [])
 
   const handleLogout = async () => {
     try {
-      if (isDemoMode() || !supabase) {
+      if (isDemoMode()) {
         // Demo mode logout
         setUser(null)
         setSelectedCommunity(null)
@@ -142,12 +147,14 @@ export default function Home() {
             detail: { user: null, event: "SIGNED_OUT" },
           }),
         )
+        toast.success("Logged out successfully!")
         return
       }
 
       // Real logout
-      const { error } = await supabase.auth.signOut()
+      const { error } = await supabase!.auth.signOut()
       if (error) throw error
+      toast.success("Logged out successfully!")
     } catch (error) {
       console.error("Logout error:", error)
       // Force logout even if there's an error

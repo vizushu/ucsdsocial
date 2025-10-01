@@ -1,21 +1,45 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 // Check if Supabase is properly configured
-export const isSupabaseConfigured = () => {
-  return !!(
+export const isSupabaseConfigured = (): boolean => {
+  const isValid = !!(
     supabaseUrl &&
     supabaseAnonKey &&
     supabaseUrl.startsWith("https://") &&
     supabaseUrl.includes(".supabase.co") &&
-    supabaseAnonKey.length > 100
+    supabaseAnonKey.length > 100 &&
+    !supabaseUrl.includes("placeholder")
   )
+
+  console.log("Supabase configuration check:", {
+    hasUrl: !!supabaseUrl,
+    hasKey: !!supabaseAnonKey,
+    isValid,
+    url: supabaseUrl?.substring(0, 30) + "...",
+  })
+
+  return isValid
 }
 
 // Create Supabase client only if properly configured
-export const supabase = isSupabaseConfigured() ? createClient(supabaseUrl!, supabaseAnonKey!) : null
+let supabaseInstance: SupabaseClient | null = null
+
+try {
+  if (isSupabaseConfigured()) {
+    supabaseInstance = createClient(supabaseUrl!, supabaseAnonKey!)
+    console.log("✅ Supabase client created successfully")
+  } else {
+    console.log("🎮 Running in demo mode - Supabase not configured")
+  }
+} catch (error) {
+  console.error("❌ Failed to create Supabase client:", error)
+  supabaseInstance = null
+}
+
+export const supabase = supabaseInstance
 
 // Enhanced types for the new schema
 export interface Database {
@@ -274,8 +298,8 @@ export const demoData = {
 }
 
 // Helper function to check if we're in demo mode
-export const isDemoMode = () => {
-  return !isSupabaseConfigured()
+export const isDemoMode = (): boolean => {
+  return !isSupabaseConfigured() || supabase === null
 }
 
 // Enhanced error handling

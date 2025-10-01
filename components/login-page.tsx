@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { supabase, isDemoMode } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [isSignUp, setIsSignUp] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [demoMode, setDemoMode] = useState(true)
+
+  useEffect(() => {
+    // Check demo mode on mount
+    setDemoMode(isDemoMode())
+    console.log("Login page loaded, demo mode:", isDemoMode())
+  }, [])
 
   const handleDemoLogin = (email: string) => {
     const mockUser = {
@@ -38,7 +45,7 @@ export default function LoginPage() {
       }),
     )
 
-    toast.success(isSignUp ? "Demo account created! Welcome!" : "Demo login successful!")
+    toast.success(isSignUp ? "Demo account created! Explore the app!" : "Demo login successful!")
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -50,60 +57,63 @@ export default function LoginPage() {
         throw new Error("Please use your UCSD email address")
       }
 
-      // Check if we're in demo mode BEFORE trying to call Supabase
-      if (isDemoMode() || !supabase) {
-        console.log("Demo mode: Simulating authentication")
+      // ALWAYS use demo mode if Supabase is not configured
+      if (demoMode) {
+        console.log("🎮 Demo mode: Simulating authentication for", email)
+        await new Promise((resolve) => setTimeout(resolve, 500)) // Simulate network delay
         handleDemoLogin(email)
         setLoading(false)
         return
       }
 
       // Only attempt real Supabase authentication if properly configured
-      try {
-        if (isSignUp) {
-          const { error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-              data: {
-                name: email
-                  .split("@")[0]
-                  .replace(/[._]/g, " ")
-                  .replace(/\b\w/g, (l) => l.toUpperCase()),
-              },
+      console.log("Attempting real Supabase authentication...")
+      if (isSignUp) {
+        const { error } = await supabase!.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              name: email
+                .split("@")[0]
+                .replace(/[._]/g, " ")
+                .replace(/\b\w/g, (l) => l.toUpperCase()),
             },
-          })
-          if (error) throw error
-          toast.success("Check your email for confirmation link!")
-        } else {
-          const { error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-          })
-          if (error) throw error
-          toast.success("Welcome back!")
-        }
-      } catch (authError: any) {
-        // If Supabase call fails, fall back to demo mode
-        console.log("Supabase authentication failed, using demo mode:", authError.message)
-        handleDemoLogin(email)
+          },
+        })
+        if (error) throw error
+        toast.success("Check your email for confirmation link!")
+      } else {
+        const { error } = await supabase!.auth.signInWithPassword({
+          email,
+          password,
+        })
+        if (error) throw error
+        toast.success("Welcome back!")
       }
     } catch (error: any) {
       console.error("Authentication error:", error)
-      toast.error(error.message || "Authentication failed")
+
+      // If we're in real mode but get an error, fall back to demo
+      if (!demoMode) {
+        console.log("Falling back to demo mode due to error")
+        handleDemoLogin(email)
+      } else {
+        toast.error(error.message || "Authentication failed")
+      }
     } finally {
       setLoading(false)
     }
   }
 
   const handleGoogleSignIn = async () => {
-    if (isDemoMode() || !supabase) {
+    if (demoMode) {
       toast.error("Demo mode: OAuth not available. Use any @ucsd.edu email instead.")
       return
     }
 
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { error } = await supabase!.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: `${window.location.origin}`,
@@ -126,9 +136,9 @@ export default function LoginPage() {
           <CardTitle className="text-2xl font-bold text-ucsd-navy dark:text-white">Welcome to UCSD Social</CardTitle>
           <CardDescription className="dark:text-gray-300">
             Connect with fellow Tritons and join amazing communities
-            {isDemoMode() && (
+            {demoMode && (
               <div className="mt-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-md p-2">
-                🎮 Running in demo mode - use any @ucsd.edu email
+                🎮 Demo Mode Active - Use any @ucsd.edu email to explore
               </div>
             )}
           </CardDescription>
@@ -157,7 +167,7 @@ export default function LoginPage() {
                 required
                 minLength={6}
               />
-              {isDemoMode() && <p className="text-xs text-muted-foreground">Any password works in demo mode</p>}
+              {demoMode && <p className="text-xs text-muted-foreground">Any password works in demo mode</p>}
             </div>
             <Button
               type="submit"
@@ -168,7 +178,7 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          {!isDemoMode() && (
+          {!demoMode && (
             <>
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
